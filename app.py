@@ -71,7 +71,7 @@ if "KODEX200" in view:
 if "FX" in view:
     cols[2].markdown(card("USD/KRW",    view["FX"].iloc[-1],        latest(sig_fx)),   unsafe_allow_html=True)
 
-tab_price, tab_fx, tab_signal = st.tabs(["가격", "환율", "Signal"])
+tab_price, tab_kodex, tab_fx, tab_signal = st.tabs(["가격", "KODEX", "환율", "Signal"])
 
 # ── 가격 탭 (Gold / KODEX200) ──────────────────
 with tab_price:
@@ -80,6 +80,7 @@ with tab_price:
         for l in vlines(sig_gold): g_fig.add_shape(l)
         st.plotly_chart(g_fig, use_container_width=True)
 
+with tab_kodex:
     if "KODEX200" in view:
         k_fig = px.line(view[["KODEX200"]], title="KODEX 200")
         for l in vlines(sig_kdx): k_fig.add_shape(l)
