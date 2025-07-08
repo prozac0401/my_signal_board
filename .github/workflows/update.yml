@@ -17,40 +17,41 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. 코드 체크아웃 (전체 히스토리)
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+    # 1) Repo 체크아웃
+    - name: Check out
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
 
-      # 2. Python 설치
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
+    # 2) 파이썬 셋업
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
 
-      # 3. 의존 패키지
-      - run: pip install -r requirements.txt
+    # 3) 의존성 설치
+    - name: Install deps
+      run: |
+        pip install -r requirements.txt
 
-      # 4. 데이터 수집 · 커밋 · push
-      - name: run fetch_data & commit
-        env:
-          FRED_KEY: ${{ secrets.FRED_KEY }}
-          ECOS_KEY: ${{ secrets.ECOS_KEY }}
-          MOLIT_KEY: ${{ secrets.MOLIT_KEY }}
-          RTMS_AREA: ${{ secrets.RTMS_AREA }}
-        run: |
-          set -e
+    # 4) 데이터 수집 스크립트 실행
+    - name: Run fetch_data.py
+      run: python fetch_data.py
 
-          # 새 CSV 생성
-          rm -f data/all_data.csv
-          python fetch_data.py
+    # 5) (선택) 새로 생성된 CSV → 아티팩트로 업로드
+    - name: Upload all_data artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: all_data-CSV
+        path: data/all_data.csv
+        retention-days: 3      # 3일 후 자동 삭제
 
-          # Git 설정
-          git config user.name  "data-bot"
-          git config user.email "bot@users.noreply.github.com"
-
-          git add data/all_data.csv
-          git commit -m "auto: data $(date -u +'%F %T')" || exit 0
-
-          # 원격 변경이 있으면 rebase 후 push
-          git pull --rebase --autostash origin ${{ github.ref_name }}
-          git push origin HEAD:${{ github.ref_name }}
+    # 6) 코드·스크립트 변경사항만 커밋-푸시
+    - name: Commit & push (스크립트만)
+      run: |
+        git config user.name  github-actions
+        git config user.email github-actions@github.com
+        # 변경된 소스 파일만 스테이징 (data/all_data.csv 는 .gitignore 로 무시됨)
+        git add -u
+        git commit -m "chore: refresh scripts $(date '+%F %T')" || exit 0
+        git push origin "${GITHUB_REF##*/}"
