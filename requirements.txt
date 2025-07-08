@@ -1,7 +1,7 @@
 pandas
 requests
 python-dotenv
-yfinance              # KODEX 200 가격
+yfinance
 streamlit
 plotly
-beautifulsoup4
+beautifulsoup4        # KRX 금 스크래핑용
