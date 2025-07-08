@@ -4,11 +4,15 @@ on:
     - cron: "30 3 * * *"   # 매일 12:30 KST
   workflow_dispatch:
 
+permissions:
+  contents: write        # ← 추가
+
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
+      with: {fetch-depth: 0}
 
     - uses: actions/setup-python@v5
       with:
