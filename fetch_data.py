@@ -1,102 +1,96 @@
-"""
-fetch_data.py
-────────────────────────────────────────────
-• ECOS 거시지표  : 기준금리, CPI, M2, USD/KRW
-• Yahoo Finance : KODEX 200 ETF
-• KRX          : 금 현물(1 g)
-→ 결측치 보간·제거 후 data/all_data.csv 저장
-"""
-
-import os, io, datetime as dt, requests, pandas as pd, yfinance as yf
-from dotenv import load_dotenv
+import os, io, datetime as dt, time, requests, pandas as pd, yfinance as yf
 from pathlib import Path
+from dotenv import load_dotenv
 
-# ─────────────────────────────────────────
 load_dotenv()
-ECOS_KEY = os.getenv("ECOS_KEY")
-if not ECOS_KEY:
-    raise EnvironmentError("❌ ECOS_KEY not found in env / secrets")
+FRED_KEY  = os.getenv("FRED_KEY", "").strip()
+ECOS_KEY  = os.getenv("ECOS_KEY", "").strip()
+DATA_DIR  = Path("data"); DATA_DIR.mkdir(exist_ok=True)
+START_DATE = "2008-01-01"
 
-# ── ECOS helper ──────────────────────────
-def ecos_series(stat_code: str, freq: str, start: str, end: str) -> pd.DataFrame:
-    """ECOS 통계 시계열 → DataFrame(date,value) 반환"""
-    # 날짜 길이 보정 (월=6, 일=8)
-    if freq.upper() == "M":
-        start, end = start[:6], end[:6]
-    elif freq.upper() == "D":
-        start, end = start[:8], end[:8]
+def save_csv(name, obj):
+    (obj if isinstance(obj, pd.DataFrame) else obj.to_frame())\
+        .to_csv(DATA_DIR / f"{name}.csv")
 
-    url = (f"https://ecos.bok.or.kr/api/StatisticSearch/"
-           f"{ECOS_KEY}/json/kr/1/1000/{stat_code}/{freq}/{start}/{end}")
-    r = requests.get(url, timeout=30)
-    data = r.json()
+# ---------- 1 FX ----------
+def fetch_fx():
+    if not FRED_KEY: return pd.Series(name="FX", dtype=float)
+    url = ("https://api.stlouisfed.org/fred/series/observations"
+           f"?series_id=DEXKOUS&api_key={FRED_KEY}&file_type=json&observation_start={START_DATE}")
+    j = requests.get(url, timeout=30).json()
+    s = pd.Series({o["date"]: float(o["value"]) for o in j["observations"] if o["value"] != "."},
+                  name="FX")
+    s.index = pd.to_datetime(s.index); save_csv("Raw_FX", s); return s
 
-    if "StatisticSearch" not in data:          # 오류 응답
-        err = data.get("RESULT", {})
-        raise RuntimeError(f"ECOS error {err.get('CODE')}: {err.get('MESSAGE')}")
+# ---------- 2 Gold ----------
+def fetch_gold():
+    txt = requests.get("https://stooq.com/q/d/l/?s=xauusd&c=2008&f=sd2", timeout=30).text.strip()
+    delim = ";" if ";" in txt.splitlines()[0] else ","
+    vals = [l.split(delim) for l in txt.splitlines()[1:]]
+    s = pd.Series({d: float(p) for d, _, _, _, p, *_ in vals if p and p != "-"}, name="Gold")
+    s.index = pd.to_datetime(s.index); save_csv("Raw_Gold", s); return s
 
-    rows = data["StatisticSearch"]["row"]
-    df = (pd.DataFrame(rows)[["TIME", "DATA_VALUE"]]
-          .rename(columns={"TIME": "date", "DATA_VALUE": stat_code}))
-    df["date"] = pd.to_datetime(df["date"])
-    df[stat_code] = pd.to_numeric(df[stat_code], errors="coerce")
-    return df.set_index("date")
+# ---------- 3 M2 ----------
+def ecos_series(code, **flt):
+    if not ECOS_KEY: return pd.Series(dtype=float)
+    end = dt.date.today().strftime("%Y%m")
+    url = (f"https://ecos.bok.or.kr/api/StatisticSearch/{ECOS_KEY}/json/kr/1/10000/"
+           f"{code}/M/200801/{end}")
+    j = requests.get(url, timeout=30).json()
+    rows = j.get("StatisticSearch", {}).get("row", [])
+    if flt: k, v = next(iter(flt.items())); rows = [r for r in rows if r.get(k) == v]
+    ser = pd.Series({r["TIME"]: float(r["DATA_VALUE"]) for r in rows if r["DATA_VALUE"] != "."})
+    ser.index = pd.to_datetime(ser.index, format="%Y%m"); return ser
 
-# ── KRX 금 현물 ───────────────────────────
-def fetch_krx_gold() -> pd.DataFrame:
-    """KRX 정보데이터시스템 OTP→CSV 방식으로 금 현물 전기간 시세 수집"""
-    sess = requests.Session()
-    otp = sess.post(
-        "https://data.krx.co.kr/comm/fileDn/GenerateOTP/generate.cmd",
-        data={
-            "name": "fileDown",
-            "url": "MDC0201060201",  # 금시장 시세
-        },
-        timeout=30,
-    ).text
-    csv = sess.post(
-        "https://data.krx.co.kr/comm/fileDn/download_csv/download.cmd",
-        data={"code": otp},
-        timeout=30,
-    ).content
-    df = (pd.read_csv(io.BytesIO(csv), encoding="euc-kr")
-            .rename(columns={"일자": "date", "종가": "KRX_GOLD"})
-            .assign(date=lambda _df: pd.to_datetime(_df["date"]))
-            .loc[:, ["date", "KRX_GOLD"]]
-            .sort_values("date")
-            .set_index("date"))
-    return df
+def fetch_m2():
+    m2 = ecos_series("101Y003", ITEM_CODE1="BBHS00")
+    if m2.empty: m2 = ecos_series("060Y002")
+    if m2.empty: m2 = ecos_series("LDT_MA001_A", ITM_ID="A")
+    m2.name = "M2"; save_csv("Raw_M2", m2); return m2
 
-# ── 메인 함수 ──────────────────────────────
+# ---------- 4 수원 거래량 ----------
+def fetch_kreb_volume():
+    try:
+        sess = requests.Session()
+        otp = sess.post(
+            "https://r-one.korea.kr/comm/fileDn/GenerateOTP.do",
+            data={"filetype":"csv","orgId":"118","tblId":"A_AA001_B","csvAttrs":"AA001_월별"},
+            timeout=30).text
+        csv = sess.post(
+            "https://r-one.korea.kr/comm/fileDn/downloadCsvFile.do",
+            data={"otp": otp}, timeout=30).content
+        df = pd.read_csv(io.BytesIO(csv), encoding="euc-kr")
+        sub = df[df["시군구코드"].isin([41111,41113,41115,41117])]
+        sub["date"] = pd.to_datetime(sub["거래년월"].astype(str)+"01", format="%Y%m%d")
+        piv = (sub.pivot(index="date", columns="시군구코드", values="건수")
+                  .rename(columns={41111:"Vol_장안구",41113:"Vol_권선구",
+                                   41115:"Vol_팔달구",41117:"Vol_영통구"}))
+        save_csv("Raw_SuwonVol", piv); return piv
+    except Exception as e:
+        print("⚠ K‑REB volume error:", e)
+        # 반환을 '날짜 Index가 있는' 빈 DF로
+        empty = pd.DataFrame(index=pd.DatetimeIndex([], name="date"))
+        return empty
+
+# ---------- 5 KODEX 200 ----------
+def fetch_kodex():
+    k = yf.download("069500.KS", start=START_DATE, auto_adjust=False)["Adj Close"]
+    k.index = k.index.tz_localize(None); k.name = "KODEX200"; return k
+
+# ---------- MAIN ----------
 def main():
-    now = dt.datetime.today()
-    YM  = now.strftime("%Y%m")       # 월 주기용 6자리
-    # 거시지표
-    rate = ecos_series("722Y001", "M", "200901", YM)   # 기준금리
-    cpi  = ecos_series("901Y010", "M", "200901", YM)   # CPI y/y
-    m2   = ecos_series("060Y002", "M", "200901", YM)   # M2 y/y
-    fx   = ecos_series("731Y001", "M", "200901", YM)   # 환율
+    fx, gold = fetch_fx(), fetch_gold()
+    m2       = fetch_m2().resample("D").ffill()
+    vol_df   = fetch_kreb_volume()
+    if not vol_df.empty: vol_df = vol_df.resample("D").ffill()
+    kodex    = fetch_kodex()
 
-    macro = rate.join([cpi, m2, fx], how="outer")
-    macro["real_rate"] = macro["722Y001"] - macro["901Y010"]
+    df_all = (pd.concat([fx, gold, m2, vol_df, kodex], axis=1)
+                 .sort_index()
+                 .ffill())
 
-    # 자산 가격
-    kodex = (yf.download("069500.KS", start="2009-01-01")["Adj Close"]
-                .rename("KODEX200").to_frame())
-    kodex.index = kodex.index.tz_localize(None)
-
-    gold = fetch_krx_gold()
-
-    df_all = (macro.join([kodex, gold], how="outer")
-                    .sort_index()
-                    .ffill()
-                    .dropna())
-
-    out_dir = Path("data")
-    out_dir.mkdir(exist_ok=True)
-    out_file = out_dir / "all_data.csv"
-    df_all.to_csv(out_file)
-    print(f"✔ Saved {len(df_all):,} rows → {out_file}")
+    save_csv("all_data", df_all)
+    print(df_all.tail())
 
 if __name__ == "__main__":
     main()
