@@ -35,6 +35,8 @@ jobs:
         env:
           FRED_KEY: ${{ secrets.FRED_KEY }}
           ECOS_KEY: ${{ secrets.ECOS_KEY }}
+          MOLIT_KEY: ${{ secrets.MOLIT_KEY }}
+          RTMS_AREA: ${{ secrets.RTMS_AREA }}
         run: |
           set -e
 
