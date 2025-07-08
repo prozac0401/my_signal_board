@@ -8,21 +8,26 @@ ECOS_KEY = os.getenv("ECOS_KEY")
 # 1) ECOS 헬퍼 함수
 # ------------------
 def ecos_series(stat_code, freq, start, end):
-    """한국은행 ECOS 시계열 호출 → DataFrame(date,value)."""
-    url = (
-        f"https://ecos.bok.or.kr/api/StatisticSearch/{ECOS_KEY}/json/kr/1/1000/"
-        f"{stat_code}/{freq}/{start}/{end}"
-    )
-    js = requests.get(url, timeout=30).json()["StatisticSearch"]["row"]
-    df = (
-        pd.DataFrame(js)[["TIME", "DATA_VALUE"]]
-        .rename(columns={"TIME": "date", "DATA_VALUE": stat_code})
-    )
+    url = (f"https://ecos.bok.or.kr/api/StatisticSearch/"
+           f"{ECOS_KEY}/json/kr/1/1000/"
+           f"{stat_code}/{freq}/{start}/{end}")
+    resp = requests.get(url, timeout=30)
+    try:
+        js = resp.json()
+    except ValueError:
+        raise ValueError(f"ECOS 응답이 JSON이 아님 → {resp.text[:200]}")
+
+    # 오류 코드 체크
+    if "StatisticSearch" not in js:
+        err = js.get("RESULT", {})
+        raise RuntimeError(f"ECOS 오류 {err.get('CODE')}: {err.get('MESSAGE')}")
+    
+    rows = js["StatisticSearch"]["row"]
+    df = (pd.DataFrame(rows)[["TIME", "DATA_VALUE"]]
+          .rename(columns={"TIME": "date", "DATA_VALUE": stat_code}))
     df["date"] = pd.to_datetime(df["date"])
     df[stat_code] = pd.to_numeric(df[stat_code], errors="coerce")
     return df.set_index("date")
-
-today = dt.datetime.today().strftime("%Y%m%d")
 
 # 주요 거시지표 ----------------------------------------------------------
 df_rate  = ecos_series("722Y001", "M", "200901", today)  # 기준금리 :contentReference[oaicite:0]{index=0}
