@@ -1,32 +1,33 @@
 name: daily-update
 on:
   schedule:
-    - cron: "30 3 * * *"   # 매일 12:30 KST
+    - cron: '30 3 * * *'
   workflow_dispatch:
 
 permissions:
-  contents: write        # ← 추가
+  contents: write                # ← NEW
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
-      with: {fetch-depth: 0}
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
 
-    - uses: actions/setup-python@v5
-      with:
-        python-version: "3.11"
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
 
-    - run: pip install -r requirements.txt
+      - run: pip install -r requirements.txt
 
-    - name: Run fetch_data & commit
-      run: |
-        python fetch_data.py
-        git config user.name "auto-bot"
-        git config user.email "bot@users.noreply.github.com"
-        git add data/all_data.csv
-        git commit -m "auto: update data $(date -u +'%Y-%m-%d %H:%M')" || echo "no changes"
-        git push
-      env:
-        ECOS_KEY: ${{ secrets.ECOS_KEY }}
+      - name: run fetch & commit
+        env:
+          FRED_KEY:  ${{ secrets.FRED_KEY }}
+          ECOS_KEY:  ${{ secrets.ECOS_KEY }}
+        run: |
+          rm -f data/all_data.csv
+          python fetch_data.py
+          git config user.name  "bot"
+          git config user.email "bot@users.noreply.github.com"
+          git add data/all_data.csv
+          git commit -m "auto: data $(date -u +'%F %T')" || echo "no change"
+          git push
