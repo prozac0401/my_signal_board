@@ -1,0 +1,7 @@
+pandas
+requests
+python-dotenv
+yfinance              # KODEX 200 가격
+streamlit
+plotly
+beautifulsoup4
