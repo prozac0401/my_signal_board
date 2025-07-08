@@ -1,0 +1,20 @@
+name: daily-update
+on:
+  schedule:
+    - cron: "30 3 * * *"   # 매일 한국시간 12:30
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11"}
+      - run: pip install -r requirements.txt
+      - run: python fetch_data.py
+      - run: git config user.name "robot"; git config user.email "bot@users.noreply.github.com"
+      - run: |
+          git add data/all_data.csv
+          git commit -m "auto: update data $(date -u +'%Y-%m-%d')" || echo "No changes"
+          git push
