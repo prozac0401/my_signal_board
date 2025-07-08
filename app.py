@@ -67,3 +67,54 @@ if "M2_D" in view:
 if "FX" in view:
     c4.markdown(card("USD/KRW",    view["FX"].iloc[-1],        latest(sig_fx)),   unsafe_allow_html=True)
 
+# ── 탭 구성 ───────────────────────────────────
+tab_gold, tab_kodex, tab_m2, tab_fx, tab_signal = st.tabs(
+    ["금 가격", "KODEX 200", "M2 통화량", "환율", "Signal"]
+)
+
+with tab_gold:
+    if "Gold_KRWg" in view:
+        fig = px.line(view[["Gold_KRWg"]], title="Gold (원/g)")
+        for l in vlines(sig_gold): fig.add_shape(l)
+        st.plotly_chart(fig, use_container_width=True)
+
+with tab_kodex:
+    if "KODEX200" in view:
+        fig = px.line(view[["KODEX200"]], title="KODEX 200")
+        for l in vlines(sig_kdx): fig.add_shape(l)
+        st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.warning("KODEX 200 가격 열을 찾을 수 없습니다.")
+
+with tab_m2:
+    if "M2_D" in view:
+        fig = px.line(view[["M2_D"]], title="M2 통화량 (일 보간)")
+        for l in vlines(sig_m2): fig.add_shape(l)
+        st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.info("M2 데이터가 없습니다.")
+
+with tab_fx:
+    if "FX" in view and view["FX"].notna().any():
+        fx = view[["FX"]].assign(MA20=view["FX"].rolling(20).mean(),
+                                 MA50=view["FX"].rolling(50).mean())
+        fig = px.line(fx, title="USD/KRW & MA20·50")
+        for l in vlines(sig_fx): fig.add_shape(l)
+        st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.info("환율 데이터가 없습니다.")
+
+with tab_signal:
+    tbl = {k:v for k,v in {
+        "Gold":  TXT[latest(sig_gold)],
+        "KODEX": TXT[latest(sig_kdx)],
+        "M2":    TXT[latest(sig_m2)],
+        "USD/KRW": TXT[latest(sig_fx)],
+    }.items() if v!="유지"}
+    st.write(f"### 비중 변화 신호 (기준 {sig_dt})")
+    if tbl:
+        st.table(pd.Series(tbl, name="Signal").to_frame())
+    else:
+        st.info("최근 비중 변화 신호가 없습니다.")
+
+st.caption("Data: FRED · Stooq · ECOS · Yahoo Finance — Signals: 20/50 MA crossing")
