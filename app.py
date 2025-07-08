@@ -75,14 +75,21 @@ def vlines(sig):
             yield dict(type="line", x0=d, x1=d, yref="paper", y0=0, y1=1,
                        line=dict(color=SIG_COLOR[c], width=1, dash="dot"), opacity=0.25)
 
-# 가격 탭
 with tab_price:
-    pcs = [c for c in ["Gold_KRWg","KODEX200"] if c in view.columns]
-    if pcs:
-        fig = px.line(view[pcs], title="Gold (원/g) · KODEX 200")
-        for ln in vlines(sig_gold): fig.add_shape(ln)
-        for ln in vlines(sig_kdx):  fig.add_shape(ln)
-        st.plotly_chart(fig, use_container_width=True)
+    # ── Gold 그래프 ─────────────────────────
+    if "Gold_KRWg" in view.columns:
+        fig_gold = px.line(view[["Gold_KRWg"]], title="Gold (원/g)")
+        for ln in vlines(sig_gold):        # 🟢/🔴만
+            fig_gold.add_shape(ln)
+        st.plotly_chart(fig_gold, use_container_width=True)
+
+    # ── KODEX 200 그래프 ─────────────────────
+    if "KODEX200" in view.columns:
+        fig_kdx = px.line(view[["KODEX200"]], title="KODEX 200")
+        for ln in vlines(sig_kdx):
+            fig_kdx.add_shape(ln)
+        st.plotly_chart(fig_kdx, use_container_width=True)
+
 
 # 환율 탭
 with tab_fx:
