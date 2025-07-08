@@ -2,38 +2,31 @@ import pandas as pd, streamlit as st, plotly.express as px
 
 # ── HELP 패널 ────────────────────────────────────────────────────
 HELP_MD = """
-### 💡 M2 YoY 4-단계 신호 구간
+### 💡 M2 YoY 4-단계 구간
 | 구간 | 해석 | 시사점 |
 |------|------|-------|
-| **> 9 %** <span style="color:#16a085">● 팽창</span> | 장기 평균+0.5 σ 이상 | **리스크-온** : 주식·부동산·원자재 확대 |
-| **6 – 9 %** <span style="color:#2ecc71">● 완충</span> | 평균 부근 | 중립·추세 확인 |
-| **3 – 6 %** <span style="color:#f39c12">● 둔화</span> | 평균-1 σ ↑ | 경계, 포트 리밸런스 |
-| **< 3 %** <span style="color:#e74c3c">● 수축</span> | 평균-1 σ 이하 | **리스크-오프** : 현금·단기채 ↑ |
+| **> 9 %**  <span style="color:#16a085">● 팽창</span> | 평균+0.5 σ↑ | **리스크-온** (주식·부동산 ↑) |
+| **6-9 %** <span style="color:#2ecc71">● 완충</span> | 평균 부근 | 중립 · 추세 확인 |
+| **3-6 %** <span style="color:#f39c12">● 둔화</span> | 평균-1 σ↑ | 경계 · 리밸런스 |
+| **< 3 %** <span style="color:#e74c3c">● 수축</span> | 평균-1 σ↓ | **리스크-오프** (현금·단기채 ↑) |
 
-#### ✨ 응용 TIP
-| 아이디어 | 설명 |
-|----------|------|
-| **신호 필터링** | M2 YoY > 9 % 구간일 때만 주식 신호(**KODEX 200**) 채택 → 가짜 반등 회피 |
-| **멀티 컨펌** | M2 팽창(> 9 %) + 환율 ↓ + KODEX 200 ↑ → **공격적 비중 확대**<br> M2 수축(< 3 %) + 금 ↓ → 안전자산 축소·현금 확보 |
-| **모멘텀 결합** | ‘팽창’ 구간이면서 M2 YoY 20 EMA 위·기울기 ↑ 일 때만 리스크-온 |
+**TIP**  
+* M2 팽창 + 환율 ↓ + KODEX ↑ → 공격적 비중 확대  
+* M2 수축 + Gold ↓ → 안전자산 축소
 """
 
 # ── 1. 데이터 로드 ───────────────────────────────────────────────
-df = (
-    pd.read_csv("data/all_data.csv", index_col=0, parse_dates=True)
-      .ffill()
-      .loc["2008-01-01":]
-)
+df = (pd.read_csv("data/all_data.csv", index_col=0, parse_dates=True)
+        .ffill()
+        .loc["2008-01-01":])
 
 if {"Gold","FX"}.issubset(df.columns):
-    df["Gold_KRWg"] = df["Gold"] * df["FX"] / 31.1035
+    df["Gold_KRWg"] = df["Gold"]*df["FX"]/31.1035
 
-# KODEX200 열 자동 매핑
 for c in df.columns:
     if c.lower().replace(" ","").startswith("kodex200") or "069500" in c.lower():
-        df.rename(columns={c: "KODEX200"}, inplace=True); break
+        df.rename(columns={c:"KODEX200"}, inplace=True); break
 
-# M2 일 보간 없으면 즉석 생성
 if "M2_D" not in df.columns and "M2" in df.columns:
     df["M2_D"] = df["M2"].resample("D").interpolate("linear")
 
@@ -43,49 +36,41 @@ d_from,d_to = st.slider("표시 기간", d0, d1, (d0,d1), format="YYYY-MM-DD")
 view   = df.loc[pd.to_datetime(d_from):pd.to_datetime(d_to)]
 sig_dt = view.index[-1].strftime("%Y-%m-%d")
 
-# ── 3. 자산 신호 ────────────────────────────────────────────────
-def ma_sig(s):
-    m20,m50 = s.rolling(20).mean(), s.rolling(50).mean()
-    return (m20-m50).apply(lambda x: 1 if x>0 else -1 if x<0 else 0)
-
+# ── 3. 자산 신호 (Gold/KDX/FX) ─────────────────────────────────
+def ma_sig(s): m20,m50=s.rolling(20).mean(),s.rolling(50).mean(); return (m20-m50).apply(lambda x:1 if x>0 else -1 if x<0 else 0)
 s_gold = ma_sig(view["Gold_KRWg"]) if "Gold_KRWg" in view else pd.Series()
 s_kdx  = ma_sig(view["KODEX200"])  if "KODEX200"  in view else pd.Series()
 s_fx   = ma_sig(view["FX"])        if "FX"        in view else pd.Series()
 
-# ── 4. M2 YoY 4-단계 신호 ───────────────────────────────────────
+# ── 4. M2 YoY 4-단계 신호 ──────────────────────────────────────
 if "M2_D" in view:
-    m = view["M2_D"].resample("M").last()
-    yoy = (m.pct_change(12)*100).rename("M2_YoY")
-    def classify(x):
-        if pd.isna(x): return -1   # 초기값
-        if x >  9: return  2
-        if x >= 6: return  1
-        if x >= 3: return -1
+    month = view["M2_D"].resample("M").last()
+    yoy   = (month.pct_change(12)*100).rename("M2_YoY")
+    def cls(x):
+        if pd.isna(x): return -1
+        if x>9: return 2
+        if x>=6: return 1
+        if x>=3: return -1
         return -2
-    s_m2 = yoy.apply(classify).reindex(view.index, method="ffill")
+    s_m2 = yoy.apply(cls).reindex(view.index, method="ffill")
 else:
     s_m2 = pd.Series()
 
-# ── 5. 컬러 & 라벨 ──────────────────────────────────────────────
-COL = { 2:"#16a085", 1:"#2ecc71", -1:"#f39c12", -2:"#e74c3c", 0:"#4d4d4d"}
-TXT = { 2:"팽창", 1:"완충", -1:"둔화", -2:"수축", 1.5:"↑", -1.5:"↓", 0:"유지"}
-def last(sig): return sig.iloc[-1] if not sig.empty else 0
-
+# ── 5. 컬러·라벨·유틸 ───────────────────────────────────────────
+COL = {2:"#16a085",1:"#2ecc71",-1:"#f39c12",-2:"#e74c3c",0:"#95a5a6"}
+TXT = {2:"팽창",1:"완충",-1:"둔화",-2:"수축",1.5:"↑",-1.5:"↓",0:"유지"}
+def last(s): return s.iloc[-1] if not s.empty else 0
 def card(t,v,code):
-    bg,tag = COL.get(code,"#95a5a6"), TXT.get(code,"-")
-    vfmt = f"{v:,.0f}" if v>1_000 else f"{v:,.2f}"
-    return f"""
-    <div style="background:{bg};border-radius:8px;padding:20px 12px;text-align:center;color:white;">
+    return f"""<div style="background:{COL[code]};border-radius:8px;padding:20px 12px;text-align:center;color:white;">
       <div style="font-size:18px;font-weight:600;">{t}</div>
-      <div style="font-size:32px;font-weight:700;margin:4px 0;">{vfmt}</div>
-      <div style="font-size:14px;">{tag} · {sig_dt}</div>
-    </div>"""
+      <div style="font-size:32px;font-weight:700;margin:4px 0;">{v:,.0f}</div>
+      <div style="font-size:14px;">{TXT[code]} · {sig_dt}</div></div>"""
 
 def vlines(sig):
     for d,c in sig[sig.shift(1)!=sig].items():
         if c in COL:
-            yield dict(type="line", x0=d, x1=d, yref="paper", y0=0, y1=1,
-                       line=dict(color=COL[c], width=1, dash="dot"), opacity=0.25)
+            yield dict(type="line",x0=d,x1=d,yref="paper",y0=0,y1=1,
+                       line=dict(color=COL[c],width=1,dash="dot"),opacity=0.25)
 
 # ── 6. 레이아웃 & HELP ─────────────────────────────────────────
 st.set_page_config("Macro Dashboard", layout="wide")
@@ -100,7 +85,7 @@ if "FX" in view:        c3.markdown(card("USD/KRW",     view["FX"].iloc[-1],    
 
 # ── 7. 탭 ───────────────────────────────────────────────────────
 tab_gold, tab_kdx, tab_m2, tab_fx, tab_sig = st.tabs(
-    ["금 가격", "KODEX 200", "M2 통화량", "환율", "Signal"]
+    ["금 가격", "KODEX 200", "M2 통화량·YoY", "환율", "Signal"]
 )
 
 with tab_gold:
@@ -119,16 +104,28 @@ with tab_kdx:
     for l in vlines(s_kdx): fig.add_shape(l)
     st.plotly_chart(fig, use_container_width=True)
 
+# ── M2: 월값·MA6·12 + YoY% 합친 하나의 그래프 ────────────────
 with tab_m2:
     if "M2_D" in view:
         m = view["M2_D"].resample("M").last().to_frame("M2_M")
-        m["MA6"] = m.M2_M.rolling(6).mean(); m["MA12"] = m.M2_M.rolling(12).mean()
-        st.plotly_chart(px.line(m, title="M2 월말 값 · MA6·12"), use_container_width=True)
-
+        m["MA6"]  = m.M2_M.rolling(6).mean()
+        m["MA12"] = m.M2_M.rolling(12).mean()
         yoy = (m.M2_M.pct_change(12)*100).rename("YoY%")
-        fig = px.bar(yoy, title="M2 YoY 증가율 (%)", opacity=0.4)
-        fig.add_scatter(x=m.index, y=m.M2_M, mode="lines", name="M2 (월)", yaxis="y2")
-        fig.update_layout(yaxis2=dict(anchor="x", overlaying="y", side="right", showgrid=False))
+
+        fig = px.bar(yoy, title="M2 YoY (%)  +  월말 M2 · MA6·12", opacity=0.45,
+                     labels={"value":"YoY %","index":"date"})
+
+        # 월말 M2 + MA6·12 (눈금 숨김)
+        fig.add_scatter(x=m.index, y=m.M2_M,  name="M2 월말",  yaxis="y2", mode="lines")
+        fig.add_scatter(x=m.index, y=m.MA6,   name="MA6",      yaxis="y2", mode="lines")
+        fig.add_scatter(x=m.index, y=m.MA12,  name="MA12",     yaxis="y2", mode="lines")
+
+        fig.update_layout(
+            yaxis=dict(title="YoY %"),
+            yaxis2=dict(anchor="x", overlaying="y", side="right",
+                        showticklabels=False, title=None),
+            legend=dict(x=0.02,y=0.98),
+        )
         for l in vlines(s_m2): fig.add_shape(l)
         st.plotly_chart(fig, use_container_width=True)
     else:
@@ -144,11 +141,11 @@ with tab_fx:
 
 with tab_sig:
     tbl = {k:v for k,v in {
-        "Gold":    TXT.get(last(s_gold),""),
-        "KODEX":   TXT.get(last(s_kdx),""),
-        "USD/KRW": TXT.get(last(s_fx),""),
-        "M2 YoY":  TXT.get(last(s_m2),""),
-    }.items() if v}
+        "Gold":TXT[last(s_gold)],
+        "KODEX":TXT[last(s_kdx)],
+        "USD/KRW":TXT[last(s_fx)],
+        "M2 YoY":TXT[last(s_m2)],
+    }.items() if v!="유지"}
     st.write(f"### 비중 변화 신호 (기준 {sig_dt})")
     st.table(pd.Series(tbl, name="Signal").to_frame() if tbl else pd.Series(dtype=str))
 
