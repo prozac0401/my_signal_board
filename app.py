@@ -71,7 +71,7 @@ if "KODEX200" in view:
 if "FX" in view:
     cols[2].markdown(card("USD/KRW",    view["FX"].iloc[-1],        latest(sig_fx)),   unsafe_allow_html=True)
 
-tab_price, tab_kodex, tab_fx, tab_signal = st.tabs(["가격", "KODEX", "환율", "Signal"])
+tab_price, tab_kodex, tab_fx, tab_signal = st.tabs(["금 가격", "KODEX 200", "환율", "Signal"])
 
 # ── 가격 탭 (Gold / KODEX200) ──────────────────
 with tab_price:
