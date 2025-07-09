@@ -52,6 +52,20 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+def _get_session(retries:int = 5, backoff:float = 1.0) -> requests.Session:
+    """keep-alive + 자동 재시도 Session 생성"""
+    s = requests.Session()
+    retry = Retry(total=retries, connect=retries, read=retries, status=retries,
+                  backoff_factor=backoff,
+                  status_forcelist=[429, 500, 502, 503, 504],
+                  allowed_methods=["GET"])
+    adapter = HTTPAdapter(max_retries=retry)
+    s.mount("http://", adapter)
+    s.mount("https://", adapter)
+    return s
+
+SESSION = _get_session()        # ← 한 번만 만들고 재사용
+
 # ── 기존 API 래퍼 (FRED, ECOS, yfinance) ──────────────────────────
 
 def fred(series: str, *, freq: str = "d", start: str = "2008-01-01") -> pd.Series:
@@ -106,59 +120,44 @@ def fetch_adj_close(ticker: str, *, start: str = "2008-01-01") -> pd.Series:
 
 # ── NEW: 한국부동산원 R‑ONE Open API 래퍼 ────────────────────────
 
-def rone_series(
-    statbl_id: str,
-    *,
-    dtcycle: str = "MM",       # "MM"=월, "WW"=주
-    cls_cd: str | None = None,  # 지역 코드 (None → 전국)
-    start: str = "200801",
-    end: str | None = None,
-) -> pd.DataFrame:
-    """Return tidy DataFrame of R-ONE API rows across period range with detailed logging."""
-    if not RONE_KEY:
-        raise RuntimeError("RONE_KEY missing in environment")
-    if end is None:
-        end = dt.date.today().strftime("%Y%m" if dtcycle == "MM" else "%Y%U")
-    freq_str = "M" if dtcycle == "MM" else "W"
-    periods = pd.period_range(start, end, freq=freq_str)
-    url = "https://www.reb.or.kr/r-one/openapi/SttsApiTblData.do"
-    frames: list[pd.DataFrame] = []
+def rone_series(statbl_id:str,
+                start:str = "200801",
+                end:str   = dt.date.today().strftime("%Y%m"),
+                cls_cd:str = "ALL",
+                dtcycle:str = "MM",
+                sleep:float = 0.4) -> pd.DataFrame:
+    """
+    R-ONE Open API → 데이터프레임
+    ① SESSION 재사용
+    ④ 연(年) 단위로 12개월 묶어 호출
+    """
+    # 연 단위 YYYY 목록 생성
+    years = range(int(start[:4]), int(end[:4]) + 1)
 
-    for p in periods:
-        wrt = p.strftime("%Y%m") if dtcycle == "MM" else p.strftime("%Y%U")
+    rows_all: list[dict] = []
+    for y in years:
+        wrt = f"{y:04d}"        # WRTTIME_IDTFR_ID 에 YYYY 지정 → 1년치 반환
         params = {
             "KEY": RONE_KEY,
             "Type": "json",
             "STATBL_ID": statbl_id,
-            "DTACYCLE_CD": dtcycle,
+            "DTACYCLE_CD": dtcycle,   # "MM" 월지표 / "WW" 주지표
             "WRTTIME_IDTFR_ID": wrt,
+            "CLS_CD": cls_cd,
         }
-        if cls_cd:
-            params["CLS_CD"] = cls_cd
-        logger.info("→ GET R-ONE %s %s cls_cd=%s", statbl_id, wrt, cls_cd or "ALL")
+        logger.info("→ GET %s %s cls=%s", statbl_id, wrt, cls_cd)
         try:
-            resp = requests.get(url, params=params, timeout=30)
+            resp = SESSION.get(BASE, params=params, timeout=(5, 15))
             resp.raise_for_status()
-            j = resp.json()
-            rows = j["SttsApiTblData"][1]["row"]
-            logger.info("  ← %s rows received", len(rows))
-            frames.append(pd.DataFrame(rows))
+            rows = resp.json()["SttsApiTblData"][1]["row"]
+            logger.info("  ← %d rows", len(rows))
+            rows_all.extend(rows)
         except Exception as e:
-            logger.warning("  ⚠ failed (%s)", e)
-            continue
+            logger.warning("  ⚠️  failed (%s)", e)
+        time.sleep(sleep)       # rate-limit 완충
 
-    if not frames:
-        logger.warning("No data retrieved for %s", statbl_id)
-        return pd.DataFrame()
-
-    df = pd.concat(frames, ignore_index=True)
-    df.rename(columns={"DTA_VAL": "value", "CLS_NM": "region"}, inplace=True)
-    time_col = "TIME_ID" if "TIME_ID" in df.columns else "TIME"
-    df["date"] = pd.to_datetime(
-        df[time_col], format="%Y%m" if dtcycle == "MM" else "%Y%W"
-    )
-    df.set_index("date", inplace=True)
-    return df[["region", "value"]]
+    df = pd.DataFrame(rows_all)
+    return df
 
 # ── NEW: 국토부 미분양주택 Open API ────────────────────────────
 
