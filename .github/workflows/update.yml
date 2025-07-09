@@ -1,5 +1,4 @@
 name: daily-update          # 워크플로 이름
-
 on:
   schedule:                 # 매일 03:30 UTC (12:30 KST) 실행
     - cron: '30 3 * * *'
@@ -36,6 +35,11 @@ jobs:
 
     # 4) 데이터 수집 스크립트 실행
     - name: Run fetch_data.py
+      env:
+        FRED_KEY:  ${{ secrets.FRED_KEY }}
+        ECOS_KEY:  ${{ secrets.ECOS_KEY }}
+        MOLIT_KEY: ${{ secrets.MOLIT_KEY }}
+        RTMS_AREA: ${{ secrets.RTMS_AREA }}
       run: python fetch_data.py
 
     # 5) (선택) 새로 생성된 CSV → 아티팩트로 업로드
