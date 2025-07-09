@@ -108,17 +108,36 @@ COL_PRICE = { 2:"#16a085", 1:"#2ecc71", -1:"#f39c12", -2:"#e74c3c", 0:"#95a5a6"}
 TXT_PRICE = { 2:"↑", 1:"↑", -1:"↓", -2:"↓", 0:"유지"}
 
 # ★ NEW — vlines 전용 팔레트 (가격 카드와 같은 색감 사용)
-COL_LINE  = COL_PRICE.copy()
+COL_LINE = {2:"#16a085", 1:"#2ecc71", -1:"#f39c12", -2:"#e74c3c"}
 
-def vlines(sig, cmap=COL_LINE):
-    """시그널 변화 시 세로 점선 반환 (dict generator)."""
-    for d, c in sig[sig.shift(1) != sig].items():
-        color = cmap.get(c)
-        if color:
-            yield dict(type="line", x0=d, x1=d, yref="paper", y0=0, y1=1,
-                       line=dict(color=color, width=1, dash="dot"),
-                       opacity=0.25)
-                
+def vlines(sig, cmap=COL_LINE, min_gap="30D", width=2):
+    """
+    자산/매크로 신호(sig)가 '값이 바뀐 날' 중
+    min_gap 이상 떨어진 핵심 이벤트만 세로선 dict 로 반환.
+    """
+    # ① 값이 달라진 지점만
+    ev = sig[sig.shift(1) != sig]
+
+    # ② 최소 간격 필터
+    if isinstance(min_gap, str):
+        min_gap = pd.Timedelta(min_gap)
+    keep_idx = []
+    last_dt  = None
+    for dt, val in ev.items():
+        if last_dt is None or dt - last_dt >= min_gap:
+            keep_idx.append(dt)
+            last_dt = dt
+    ev = ev.loc[keep_idx]
+
+    # ③ Plotly shape dict 생성
+    for dt, val in ev.items():
+        color = cmap.get(val, "#95a5a6")
+        yield {
+            "type":"line", "x0":dt, "x1":dt, "yref":"paper", "y0":0, "y1":1,
+            "line":{"color":color, "width":width, "dash":"dot"},
+            "opacity":0.4
+        }
+            
 def price_card(t,v,code):
     return f"""<div style="background:{COL_PRICE[code]};border-radius:8px;padding:20px 12px;text-align:center;color:white;">
       <div style="font-size:18px;font-weight:600;">{t}</div>
