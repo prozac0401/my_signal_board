@@ -106,15 +106,16 @@ def rone_series(
     start: str = "200801",
     end: str | None = None,
 ) -> pd.DataFrame:
-    """Return tidy DataFrame of R‑ONE API rows across period range."""
+    """Return tidy DataFrame of R-ONE API rows across period range with detailed logging."""
     if not RONE_KEY:
         raise RuntimeError("RONE_KEY missing in environment")
     if end is None:
-        end = dt.date.today().strftime("%Y%m" if dtcycle == "MM" else "%Y%W")
+        end = dt.date.today().strftime("%Y%m" if dtcycle == "MM" else "%Y%U")
     freq_str = "M" if dtcycle == "MM" else "W"
     periods = pd.period_range(start, end, freq=freq_str)
     url = "https://www.reb.or.kr/r-one/openapi/SttsApiTblData.do"
     frames: list[pd.DataFrame] = []
+
     for p in periods:
         wrt = p.strftime("%Y%m") if dtcycle == "MM" else p.strftime("%Y%U")
         params = {
@@ -126,18 +127,28 @@ def rone_series(
         }
         if cls_cd:
             params["CLS_CD"] = cls_cd
+        logger.info("→ GET R-ONE %s %s cls_cd=%s", statbl_id, wrt, cls_cd or "ALL")
         try:
-            j = requests.get(url, params=params, timeout=30).json()
-            rows = j["SttsApiTblData"][1]["row"]  # [0]→meta, [1]→data
+            resp = requests.get(url, params=params, timeout=30)
+            resp.raise_for_status()
+            j = resp.json()
+            rows = j["SttsApiTblData"][1]["row"]
+            logger.info("  ← %s rows received", len(rows))
             frames.append(pd.DataFrame(rows))
-        except Exception:
-            continue  # 조용히 스킵
+        except Exception as e:
+            logger.warning("  ⚠ failed (%s)", e)
+            continue
+
     if not frames:
+        logger.warning("No data retrieved for %s", statbl_id)
         return pd.DataFrame()
+
     df = pd.concat(frames, ignore_index=True)
     df.rename(columns={"DTA_VAL": "value", "CLS_NM": "region"}, inplace=True)
     time_col = "TIME_ID" if "TIME_ID" in df.columns else "TIME"
-    df["date"] = pd.to_datetime(df[time_col], format="%Y%m" if dtcycle == "MM" else "%Y%W")
+    df["date"] = pd.to_datetime(
+        df[time_col], format="%Y%m" if dtcycle == "MM" else "%Y%W"
+    )
     df.set_index("date", inplace=True)
     return df[["region", "value"]]
 
