@@ -45,6 +45,13 @@ def save(name: str, obj: pd.Series | pd.DataFrame) -> None:
     obj.to_csv(DIR / f"{name}.csv", index=True)
     print(f"✔ {name:25s} {len(obj):6,d}")
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+logger = logging.getLogger(__name__)
+
 # ── 기존 API 래퍼 (FRED, ECOS, yfinance) ──────────────────────────
 
 def fred(series: str, *, freq: str = "d", start: str = "2008-01-01") -> pd.Series:
