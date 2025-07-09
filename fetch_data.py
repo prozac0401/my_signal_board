@@ -19,6 +19,9 @@ import io
 import datetime as dt
 from pathlib import Path
 from typing import List
+import requests, time, datetime as dt, pandas as pd
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 import logging
 
 import pandas as pd
