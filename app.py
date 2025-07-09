@@ -60,8 +60,10 @@ else:
 # ── 5. 컬러·라벨·유틸 ───────────────────────────────────────────
 COL = {2:"#16a085",1:"#2ecc71",-1:"#f39c12",-2:"#e74c3c",0:"#95a5a6"}
 TXT = {2:"팽창",1:"완충",-1:"둔화",-2:"수축",1.5:"↑",-1.5:"↓",0:"유지"}
+
 def last(s): return s.iloc[-1] if not s.empty else 0
-def card(t,v,code: int = 0):
+        
+def card(t,v,code):
     return f"""<div style="background:{COL[code]};border-radius:8px;padding:20px 12px;text-align:center;color:white;">
       <div style="font-size:18px;font-weight:600;">{t}</div>
       <div style="font-size:32px;font-weight:700;margin:4px 0;">{v:,.0f}</div>
@@ -164,8 +166,8 @@ with tab_rate:
         bond_last  = r["Bond10"].dropna().iloc[-1] if not r["Bond10"].dropna().empty else None
 
         col1, col2 = st.columns(2)
-        col1.markdown(card("기준금리 (%)",   rate_last),  unsafe_allow_html=True)
-        col2.markdown(card("10Y 수익률 (%)", bond_last), unsafe_allow_html=True)
+        col1.markdown(card("기준금리 (%)",   rate_last, 0),  unsafe_allow_html=True)
+        col2.markdown(card("10Y 수익률 (%)", bond_last, 0), unsafe_allow_html=True)
     else:
         st.info("Rate 또는 Bond10 데이터가 없습니다.")
 
