@@ -16,16 +16,6 @@ HELP_MD = """
 | **멀티 컨펌** | M2 팽창 + 환율 ↓ + KODEX 200 ↑ → **공격적 비중 확대**<br>M2 수축 + Gold ↓ → 안전자산 축소·현금 확보 |
 | **모멘텀 결합** | ‘팽창’이면서 M2 YoY 20 EMA 위 && 기울기 상승일 때만 리스크‑온 |
 """
-def _fmt(v):
-    """Safely format a scalar for display."""
-    import math, pandas as pd, numpy as np
-    if v is None or (isinstance(v, (float, int)) and math.isnan(v)) or pd.isna(v):
-        return "N/A"
-    try:
-        return f"{float(v):,.2f}"
-    except (TypeError, ValueError):
-        return str(v)
-            
 # ── 1. 데이터 로드 ──────────────────────────────────────────────
 df = (pd.read_csv("data/all_data.csv", index_col=0, parse_dates=True)
         .ffill()
@@ -71,7 +61,7 @@ else:
 COL = {2:"#16a085",1:"#2ecc71",-1:"#f39c12",-2:"#e74c3c",0:"#95a5a6"}
 TXT = {2:"팽창",1:"완충",-1:"둔화",-2:"수축",1.5:"↑",-1.5:"↓",0:"유지"}
 def last(s): return s.iloc[-1] if not s.empty else 0
-def card(t,v,code):
+def card(t,v,code: int = 0):
     return f"""<div style="background:{COL[code]};border-radius:8px;padding:20px 12px;text-align:center;color:white;">
       <div style="font-size:18px;font-weight:600;">{t}</div>
       <div style="font-size:32px;font-weight:700;margin:4px 0;">{v:,.0f}</div>
