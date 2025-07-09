@@ -73,6 +73,10 @@ if "M2_D" in view:
     m2_score = m2_yoy.apply(m2_cls).reindex(view.index, method="ffill")
     macro = macro.add(m2_score, fill_value=0)
 
+    s_m2 = m2_score            # ★★★★★  ← 이 줄을 추가 ★★★★★
+else:
+    s_m2 = pd.Series()         # (없을 때 대비)
+
 # 4-B) 장-단 스프레드  (+1 / 0 / -1)
 if {"Rate","Bond10"}.issubset(view.columns):
     spread = (view["Bond10"] - view["Rate"]).rolling(5).mean()
