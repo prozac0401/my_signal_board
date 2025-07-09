@@ -151,6 +151,7 @@ with tab_rate:
         r = view[["Rate", "Bond10"]].copy()
         r["Rate_MA3"]   = r.Rate.rolling(3).mean()
         r["Bond10_MA3"] = r.Bond10.rolling(3).mean()
+
         fig = px.line(
             r,
             y=["Rate", "Rate_MA3", "Bond10", "Bond10_MA3"],
@@ -158,12 +159,17 @@ with tab_rate:
             labels={"value": "%", "variable": ""},
         )
         st.plotly_chart(fig, use_container_width=True)
+
+        # ── 카드용 마지막 “유효” 값 ────────────────────────
+        rate_last  = r["Rate"].dropna().iloc[-1]   if not r["Rate"].dropna().empty else None
+        bond_last  = r["Bond10"].dropna().iloc[-1] if not r["Bond10"].dropna().empty else None
+
         col1, col2 = st.columns(2)
-        col1.markdown(card("기준금리 (%)",  r.Rate.iloc[-1]),   unsafe_allow_html=True)
-        col2.markdown(card("10Y 수익률 (%)", r.Bond10.iloc[-1]), unsafe_allow_html=True)
+        col1.markdown(card("기준금리 (%)",   rate_last),  unsafe_allow_html=True)
+        col2.markdown(card("10Y 수익률 (%)", bond_last), unsafe_allow_html=True)
     else:
         st.info("Rate 또는 Bond10 데이터가 없습니다.")
-      
+
 with tab_sig:
     tbl = {k:v for k,v in {
         "Gold":TXT[last(s_gold)],
