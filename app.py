@@ -1,21 +1,24 @@
+import numpy as np                                    # ★ NEW
 import pandas as pd, streamlit as st, plotly.express as px
+
 # ── HELP 패널 ───────────────────────────────────────────────────
 HELP_MD = """
-### M2 YoY 4‑단계 구간
+### M2 YoY 4-단계 구간
 | 구간 | 해석 | 시사점 |
 |------|------|-------|
-| **> 9 %** • 팽창 | 평균 + 0.5 σ 이상 | 리스크‑온 (주식·부동산 확대) |
-| **6 – 9 %** • 완충 | 평균 부근 | 중립 · 추세 확인 |
-| **3 – 6 %** • 둔화 | 평균 – 1 σ 이상 | 경계 · 리밸런스 |
-| **< 3 %** • 수축 | 평균 – 1 σ 이하 | 리스크‑오프 (현금·단기채 확대) |
+| **> 9 %** • 팽창 | 평균 + 0.5 σ 이상 | 리스크-온 (주식·부동산 확대) |
+| **6 – 9 %** • 완충 | 평균 부근 | 중립 · 추세 확인 |
+| **3 – 6 %** • 둔화 | 평균 – 1 σ 이상 | 경계 · 리밸런스 |
+| **< 3 %** • 수축 | 평균 – 1 σ 이하 | 리스크-오프 (현금·단기채 확대) |
 
-#### 응용 TIP
+#### 응용 TIP
 | 아이디어 | 설명 |
 |----------|------|
-| **신호 필터링** | M2 YoY > 9 % 구간에서만 KODEX 200 신호 채택 → 가짜 반등 회피 |
-| **멀티 컨펌** | M2 팽창 + 환율 ↓ + KODEX 200 ↑ → **공격적 비중 확대**<br>M2 수축 + Gold ↓ → 안전자산 축소·현금 확보 |
-| **모멘텀 결합** | ‘팽창’이면서 M2 YoY 20 EMA 위 && 기울기 상승일 때만 리스크‑온 |
+| **신호 필터링** | M2 YoY > 9 % 구간에서만 KODEX 200 신호 채택 → 가짜 반등 회피 |
+| **멀티 컨펌** | M2 팽창 + 환율 ↓ + KODEX 200 ↑ → **공격적 비중 확대**<br>M2 수축 + Gold ↓ → 안전자산 축소·현금 확보 |
+| **모멘텀 결합** | ‘팽창’이면서 M2 YoY 20 EMA 위 && 기울기 상승일 때만 리스크-온 |
 """
+
 # ── 1. 데이터 로드 ──────────────────────────────────────────────
 df = (pd.read_csv("data/all_data.csv", index_col=0, parse_dates=True)
         .ffill()
@@ -31,62 +34,89 @@ for c in df.columns:
 if "M2_D" not in df.columns and "M2" in df.columns:
     df["M2_D"] = df["M2"].resample("D").interpolate("linear")
 
-# ── 2. 기간 슬라이더 ─────────────────────────────────────────────
+# ── 2. 기간 슬라이더 ───────────────────────────────────────────
 d0,d1 = df.index.min().date(), df.index.max().date()
 d_from,d_to = st.slider("표시 기간", d0, d1, (d0,d1), format="YYYY-MM-DD")
 view   = df.loc[pd.to_datetime(d_from):pd.to_datetime(d_to)]
 sig_dt = view.index[-1].strftime("%Y-%m-%d")
 
-# ── 3. 자산 신호 (Gold/KDX/FX) ─────────────────────────────────
-def ma_sig(s): m20,m50=s.rolling(20).mean(),s.rolling(50).mean(); return (m20-m50).apply(lambda x:1 if x>0 else -1 if x<0 else 0)
-s_gold = ma_sig(view["Gold_KRWg"]) if "Gold_KRWg" in view else pd.Series()
-s_kdx  = ma_sig(view["KODEX200"])  if "KODEX200"  in view else pd.Series()
-s_fx   = ma_sig(view["FX"])        if "FX"        in view else pd.Series()
+# ── 3. 자산별 가격 “추세 점수”  (-2 … +2) ─────────────────────── ★ NEW
+def trend_score(series, short=20, long=50):
+    ma_s, ma_l = series.rolling(short).mean(), series.rolling(long).mean()
+    cross  = np.sign(ma_s - ma_l)                # -1 / 0 / +1
+    mom_1m = np.sign(series.pct_change(21))      # -1 / 0 / +1
+    return (cross + mom_1m).clip(-2, 2)
 
-# ── 4. M2 YoY 4-단계 신호 ──────────────────────────────────────
+trend = {}
+if "Gold_KRWg" in view: trend["Gold"]   = trend_score(view["Gold_KRWg"])
+if "KODEX200"  in view: trend["KODEX"]  = trend_score(view["KODEX200"])
+if "FX"        in view: trend["USDKRW"] = trend_score(view["FX"])
+
+# ── 4. 매크로 레짐 점수 (-3 … +3) ────────────────────────────── ★ NEW
+macro = pd.Series(0, index=view.index)
+
+# 4-A) M2 YoY 4-단계  (-2 … +2)
 if "M2_D" in view:
     month = view["M2_D"].resample("M").last()
-    yoy   = (month.pct_change(12)*100).rename("M2_YoY")
-    def cls(x):
+    m2_yoy = (month.pct_change(12)*100).rename("M2_YoY")
+    def m2_cls(x):
         if pd.isna(x): return -1
         if x>9: return 2
         if x>=6: return 1
         if x>=3: return -1
         return -2
-    s_m2 = yoy.apply(cls).reindex(view.index, method="ffill")
-else:
-    s_m2 = pd.Series()
+    m2_score = m2_yoy.apply(m2_cls).reindex(view.index, method="ffill")
+    macro = macro.add(m2_score, fill_value=0)
 
-# ── 5. 컬러·라벨·유틸 ───────────────────────────────────────────
-COL = {2:"#16a085",1:"#2ecc71",-1:"#f39c12",-2:"#e74c3c",0:"#95a5a6"}
-TXT = {2:"팽창",1:"완충",-1:"둔화",-2:"수축",1.5:"↑",-1.5:"↓",0:"유지"}
+# 4-B) 장-단 스프레드  (+1 / 0 / -1)
+if {"Rate","Bond10"}.issubset(view.columns):
+    spread = (view["Bond10"] - view["Rate"]).rolling(5).mean()
+    spread_score = spread.apply(lambda x: 1 if x>0.5 else -1 if x<0 else 0)
+    macro = macro.add(spread_score, fill_value=0)
 
-def last(s): return s.iloc[-1] if not s.empty else 0
-        
-def card(t,v,code):
-    return f"""<div style="background:{COL[code]};border-radius:8px;padding:20px 12px;text-align:center;color:white;">
+macro = macro.clip(-3, 3)
+
+# ── 5. 최종 시그널  (-3 … +3)  &  색·라벨 ─────────────────── ★ NEW
+def last(s): return s.iloc[-1] if not s.empty else np.nan
+
+SIG_COL = { 3:"#198754", 2:"#28c76f", 1:"#6c757d", 0:"#6c757d",
+           -1:"#6c757d",-2:"#ff9f43",-3:"#dc3545"}
+SIG_TXT = { 3:"Strong Buy", 2:"Buy", 1:"Neutral +", 0:"Neutral",
+           -1:"Neutral –",-2:"Sell",-3:"Strong Sell"}
+
+def card_sig(asset, score):
+    clr  = SIG_COL.get(score, "#95a5a6")
+    lbl  = SIG_TXT.get(score, "N/A")
+    return f"""
+    <div style="background:{clr};border-radius:8px;padding:20px 12px;text-align:center;color:white;">
+        <div style="font-size:18px;font-weight:600;">{asset}</div>
+        <div style="font-size:32px;font-weight:700;margin:4px 0;">{lbl}</div>
+        <div style="font-size:14px;opacity:.8;">{sig_dt}</div>
+    </div>"""
+
+# ── 6. 기존 가격·MoM 카드 (방향성) ──────────────────────────────
+COL_PRICE = { 2:"#16a085", 1:"#2ecc71", -1:"#f39c12", -2:"#e74c3c", 0:"#95a5a6"}
+TXT_PRICE = { 2:"↑", 1:"↑", -1:"↓", -2:"↓", 0:"유지"}
+
+def price_card(t,v,code):
+    return f"""<div style="background:{COL_PRICE[code]};border-radius:8px;padding:20px 12px;text-align:center;color:white;">
       <div style="font-size:18px;font-weight:600;">{t}</div>
       <div style="font-size:32px;font-weight:700;margin:4px 0;">{v:,.0f}</div>
-      <div style="font-size:14px;">{TXT[code]} · {sig_dt}</div></div>"""
+      <div style="font-size:14px;">{TXT_PRICE[code]} · {sig_dt}</div></div>"""
 
-def vlines(sig):
-    for d,c in sig[sig.shift(1)!=sig].items():
-        if c in COL:
-            yield dict(type="line",x0=d,x1=d,yref="paper",y0=0,y1=1,
-                       line=dict(color=COL[c],width=1,dash="dot"),opacity=0.25)
-
-# ── 6. 레이아웃 & HELP ─────────────────────────────────────────
+# ── 7. 레이아웃 & HELP ─────────────────────────────────────────
 st.set_page_config("Macro Dashboard", layout="wide")
 st.title("📊 거시 · 자산 대시보드")
 with st.sidebar.expander("ℹ️ M2 YoY 도움말", False):
     st.markdown(HELP_MD, unsafe_allow_html=True)
 
+# ── 8. 가격 카드 (Top) ─────────────────────────────────────────
 c1,c2,c3 = st.columns(3)
-if "Gold_KRWg" in view: c1.markdown(card("Gold (원/g)", view["Gold_KRWg"].iloc[-1], last(s_gold)), unsafe_allow_html=True)
-if "KODEX200" in view:  c2.markdown(card("KODEX 200",   view["KODEX200"].iloc[-1],  last(s_kdx)),  unsafe_allow_html=True)
-if "FX" in view:        c3.markdown(card("USD/KRW",     view["FX"].iloc[-1],        last(s_fx)),   unsafe_allow_html=True)
+if "Gold_KRWg" in view: c1.markdown(price_card("Gold (원/g)", view["Gold_KRWg"].iloc[-1], int(last(trend.get("Gold", pd.Series())))), unsafe_allow_html=True)
+if "KODEX200" in view:  c2.markdown(price_card("KODEX 200",   view["KODEX200"].iloc[-1],  int(last(trend.get("KODEX", pd.Series())))),  unsafe_allow_html=True)
+if "FX" in view:        c3.markdown(price_card("USD/KRW",     view["FX"].iloc[-1],        int(last(trend.get("USDKRW", pd.Series())))), unsafe_allow_html=True)
 
-# ── 7. 탭 ───────────────────────────────────────────────────────
+# ── 9. 탭 ───────────────────────────────────────────────────────
 tab_gold, tab_kdx, tab_m2, tab_fx, tab_rate, tab_sig = st.tabs(
     ["금 가격", "KODEX 200", "M2 통화량·YoY", "환율", "금리·10Y", "Signal"]
 )
@@ -171,14 +201,25 @@ with tab_rate:
     else:
         st.info("Rate 또는 Bond10 데이터가 없습니다.")
 
+# 6) Signal 탭  ------------------------------------------------------------- ★ NEW
 with tab_sig:
-    tbl = {k:v for k,v in {
-        "Gold":TXT[last(s_gold)],
-        "KODEX":TXT[last(s_kdx)],
-        "USD/KRW":TXT[last(s_fx)],
-        "M2 YoY":TXT[last(s_m2)],
-    }.items() if v!="유지"}
-    st.write(f"### 비중 변화 신호 (기준 {sig_dt})")
-    st.table(pd.Series(tbl, name="Signal").to_frame() if tbl else pd.Series(dtype=str))
+    final_scores = {}
+    for asset, ts in trend.items():
+        combined = (ts + macro).clip(-3, 3)
+        final_scores[asset] = int(last(combined))
+    # 부동산 신호 예시 (월간 YoY 3개월 모멘텀)
+    if "RTMS" in view:
+        realty_trend = view["RTMS"].pct_change(3).apply(
+            lambda x: 2 if x>0.03 else 1 if x>0 else -1 if x>-0.03 else -2
+        )
+        final_scores["Realty"] = int(last((realty_trend + macro).clip(-3,3)))
 
-st.caption("Data: FRED · Stooq · ECOS · Yahoo Finance — Signals = M2 YoY 4-단계 + MA cross")
+    st.write(f"### 통합 자산 시그널  (기준 {sig_dt})")
+    if final_scores:
+        cols = st.columns(len(final_scores))
+        for (asset,score),col in zip(final_scores.items(), cols):
+            col.markdown(card_sig(asset, score), unsafe_allow_html=True)
+    else:
+        st.info("시그널을 계산할 데이터가 부족합니다.")
+
+st.caption("Data: FRED · Stooq · ECOS · Yahoo Finance — Signals = Macro(M2 + Spread) × Trend")
