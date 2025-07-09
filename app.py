@@ -221,13 +221,13 @@ with tab_fx:
 with tab_rate:
     if {"Rate", "Bond10"}.issubset(view.columns):
         r = view[["Rate", "Bond10"]].copy()
+            
+        # ① 기준금리 · 10Y 모두 월말로 변환 → 3-개월 SMA
+        rate_m  = r["Rate"].resample("M").last()
+        bond_m  = r["Bond10"].resample("M").last()
 
-        # ① 기준금리는 그대로 3-일 SMA 유지
-        r["Rate_MA3M"] = r.Rate.rolling(3*30).mean()
-
-        # ② Bond10은 3-‘개월’ SMA (월말 데이터 가정)
-        bond_m = r["Bond10"].resample("M").last()
-        r["Bond10_MA3M"] = bond_m.rolling(3*30).mean().reindex(r.index, method="ffill")
+        r["Rate_MA3M"]   = rate_m.rolling(3).mean().reindex(r.index, method="ffill")
+        r["Bond10_MA3M"] = bond_m.rolling(3).mean().reindex(r.index, method="ffill")
 
         fig = px.line(
             r,
@@ -237,13 +237,15 @@ with tab_rate:
         )
         st.plotly_chart(fig, use_container_width=True)
 
-        # ── 카드용 마지막 “유효” 값 ────────────────────────
-        rate_last  = r["Rate"].dropna().iloc[-1]   if not r["Rate"].dropna().empty else None
-        bond_last  = r["Bond10"].dropna().iloc[-1] if not r["Bond10"].dropna().empty else None
+        # ③ 카드 (값·방향 표시용 = price_card)
+        rate_last = r["Rate"].dropna().iloc[-1]
+        bond_last = r["Bond10"].dropna().iloc[-1]
 
         col1, col2 = st.columns(2)
-        col1.markdown(card_sig("기준금리 (%)",   rate_last),  unsafe_allow_html=True)
-        col2.markdown(card_sig("10Y 수익률 (%)", bond_last), unsafe_allow_html=True)
+        col1.markdown(price_card("기준금리 (%)",   rate_last, 0),
+                      unsafe_allow_html=True)
+        col2.markdown(price_card("10Y 수익률 (%)", bond_last, 0),
+                      unsafe_allow_html=True)
     else:
         st.info("Rate 또는 Bond10 데이터가 없습니다.")
 
