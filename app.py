@@ -52,6 +52,11 @@ if "Gold_KRWg" in view: trend["Gold"]   = trend_score(view["Gold_KRWg"])
 if "KODEX200"  in view: trend["KODEX"]  = trend_score(view["KODEX200"])
 if "FX"        in view: trend["USDKRW"] = trend_score(view["FX"])
 
+# 기존 코드와의 호환을 위해 별도 변수에 할당 
+s_gold = trend.get("Gold",   pd.Series())
+s_kdx  = trend.get("KODEX",  pd.Series())
+s_fx   = trend.get("USDKRW", pd.Series())
+
 # ── 4. 매크로 레짐 점수 (-3 … +3) ────────────────────────────── ★ NEW
 macro = pd.Series(0, index=view.index)
 
