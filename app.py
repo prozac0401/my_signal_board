@@ -242,8 +242,8 @@ with tab_rate:
         bond_last  = r["Bond10"].dropna().iloc[-1] if not r["Bond10"].dropna().empty else None
 
         col1, col2 = st.columns(2)
-        col1.markdown(card("기준금리 (%)",   rate_last, 0),  unsafe_allow_html=True)
-        col2.markdown(card("10Y 수익률 (%)", bond_last, 0), unsafe_allow_html=True)
+        col1.markdown(card_sig("기준금리 (%)",   rate_last),  unsafe_allow_html=True)
+        col2.markdown(card_sig("10Y 수익률 (%)", bond_last), unsafe_allow_html=True)
     else:
         st.info("Rate 또는 Bond10 데이터가 없습니다.")
 
