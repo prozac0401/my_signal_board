@@ -208,9 +208,9 @@ save("UnsoldHousing_month", unsold_m)
 
 # 4‑3 매수(우위)지수 – 월 & 주
 buyer_m = rone_series("A_2024_00076")           # 월
-buyer_w = rone_series("T248163133074619", dtcycle="WW")  # 주
+#buyer_w = rone_series("T248163133074619", dtcycle="WW")  # 주
 save("BuyerSentiment_month",  buyer_m)
-save("BuyerSentiment_weekly", buyer_w)
+#save("BuyerSentiment_weekly", buyer_w)
 
 # ── 월→일 변환 예시 (거시지표) ────────────────────────────────
 rate_d   = rate.resample("D").ffill()
