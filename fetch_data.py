@@ -36,6 +36,7 @@ ECOS_KEY   = os.getenv("ECOS_KEY", "")
 RONE_KEY   = os.getenv("RONE_KEY", "")      # 한국부동산원 Open API
 MOLIT_KEY  = os.getenv("MOLIT_KEY", "")     # 국토교통부 통계누리 Open API
 DIR = Path("data"); DIR.mkdir(exist_ok=True)
+BASE = "https://www.reb.or.kr/r-one/openapi/SttsApiTblData.do"
 
 # FRED 시리즈 ID 상수화
 RATE_FRED_ID   = "INTDSRKRM193N"    # Bank of Korea Base Rate (monthly)
