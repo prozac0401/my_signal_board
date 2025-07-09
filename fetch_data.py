@@ -1,5 +1,5 @@
 """
-fetch_data.py  –  거시·자산 원천 데이터 수집 (업데이트 버전)
+fetch_data.py  –  거시·자산 원천 데이터 수집 (v2)
 ────────────────────────────────────────────
 ✓ FX       : USD/KRW (FRED DEXKOUS, 일)
 ✓ Gold     : XAU/USD (Stooq, 일)
@@ -33,7 +33,6 @@ DIR = Path("data"); DIR.mkdir(exist_ok=True)
 # ── 공통 유틸 ───────────────────────────────────
 
 def save(name: str, obj: pd.Series | pd.DataFrame) -> None:
-    """Save object as CSV under ./data and log its length."""
     obj.to_csv(DIR / f"{name}.csv")
     print(f"✔ {name:13s} {len(obj):6,d}")
 
@@ -60,7 +59,6 @@ def fred(series: str, *, freq: str = "d", start: str = "2008-01-01") -> pd.Serie
 
 
 def ecos(code: str, **flt) -> pd.Series:
-    """한국은행 ECOS API(월) 래퍼. 빈 시리즈면 .empty 가 True"""
     end = dt.date.today().strftime("%Y%m")
     url = (
         f"https://ecos.bok.or.kr/api/StatisticSearch/{ECOS_KEY}"
@@ -81,13 +79,10 @@ def ecos(code: str, **flt) -> pd.Series:
 
 
 def fetch_adj_close(ticker: str, *, start: str = "2008-01-01") -> pd.Series:
-    """Robustly fetch Adj Close (fallback Close) series via yfinance.
-    Handles both single‑level and MultiIndex column formats introduced in yfinance 0.2+."""
     raw = yf.download(ticker, start=start, progress=False, threads=False)
     if raw.empty:
         raise RuntimeError(f"yfinance returned no data for {ticker}")
-
-    raw.index = raw.index.tz_localize(None)  # unify timezone
+    raw.index = raw.index.tz_localize(None)
 
     if isinstance(raw.columns, pd.MultiIndex):
         lvl0 = raw.columns.get_level_values(0)
@@ -103,18 +98,17 @@ def fetch_adj_close(ticker: str, *, start: str = "2008-01-01") -> pd.Series:
 
 
 # ── 1. 원시 시리즈 수집 ──────────────────────────
-fx   = fred("DEXKOUS");                    save("FX_raw", fx)
+fx   = fred("DEXKOUS");      fx.name  = "FX";      save("FX_raw", fx)
 
 gold = pd.read_csv(
     io.StringIO(requests.get("https://stooq.com/q/d/l/?s=xauusd&c=2008&f=sd2").text),
     sep=";", engine="python",
 )
 gold = gold[gold.Close != "-"][["Date", "Close"]].set_index("Date").astype(float).squeeze()
-gold.index = pd.to_datetime(gold.index)
-gold.name = "Gold";                    save("Gold_raw", gold)
+gold.index = pd.to_datetime(gold.index); gold.name = "Gold"; save("Gold_raw", gold)
 
-dxy  = fred("DTWEXM");                    save("DXY_raw", dxy)
-rate = ecos("722Y001");                  save("Rate_month", rate)
+dxy  = fred("DTWEXM");       dxy.name = "DXY";     save("DXY_raw", dxy)
+rate = ecos("722Y001");      rate.name = "Rate";   save("Rate_month", rate)
 
 # --- M2 (순차 폴백) ----------------------------------------------------------
 _m2_candidates = [
@@ -124,13 +118,11 @@ _m2_candidates = [
 ]
 
 m2 = next((s for s in _m2_candidates if not s.empty), pd.Series(name="M2"))
-m2.name = "M2"
-save("M2_month", m2)
+m2.name = "M2"; save("M2_month", m2)
 
-bond10 = fred("IRLTLT01KRM156N", freq="m");  save("Bond10_month", bond10)
+bond10 = fred("IRLTLT01KRM156N", freq="m");  bond10.name = "Bond10"; save("Bond10_month", bond10)
 
-kodex = fetch_adj_close("069500.KS");
-kodex.name = "KODEX200";                save("KODEX200_raw", kodex)
+kodex = fetch_adj_close("069500.KS").rename("KODEX200"); save("KODEX200_raw", kodex)
 
 # ── 2. 월→일 변환 ──────────────────────────────
 rate_d  = rate.resample("D").ffill()
