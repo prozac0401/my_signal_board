@@ -40,6 +40,9 @@ jobs:
         ECOS_KEY:  ${{ secrets.ECOS_KEY }}
         MOLIT_KEY: ${{ secrets.MOLIT_KEY }}
         RTMS_AREA: ${{ secrets.RTMS_AREA }}
+      run: |
+        echo "FRED_KEY length: ${#FRED_KEY}"
+        echo "ECOS_KEY length: ${#ECOS_KEY}"
       run: python fetch_data.py
 
     # 5) (선택) 새로 생성된 CSV → 아티팩트로 업로드
