@@ -19,6 +19,7 @@ import io
 import datetime as dt
 from pathlib import Path
 from typing import List
+import logging
 
 import pandas as pd
 import requests
