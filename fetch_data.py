@@ -1,11 +1,11 @@
 """
-fetch_data.py  –  거시·자산 원천 데이터 수집 (v2)
+fetch_data.py  –  거시·자산 원천 데이터 수집 (v3)
 ────────────────────────────────────────────
 ✓ FX       : USD/KRW (FRED DEXKOUS, 일)
 ✓ Gold     : XAU/USD (Stooq, 일)
 ✓ DXY      : 달러지수 (FRED DTWEXM, 일)
-✓ Rate     : 기준금리 722Y001 (월 → 일 ffill)
-✓ Bond10   : 10년물 IRLTLT01KRM156N (월 → 일 ffill)
+✓ Rate     : 한국은행 기준금리 (FRED INTDSRKRM193N, 월 → 일 ffill)
+✓ Bond10   : 국채 10년 수익률 (FRED IRLTLT01KRM156N, 월 → 일 ffill)
 ✓ M2       : 통화량(월) 101Y003 ▷ 060Y002 ▷ LDT_MA001_A → 일 선형보간(M2_D)
 ✓ KODEX200 : 069500.KS (일)
 결과 → data/all_data.csv  (일 빈도, ffill)
@@ -29,6 +29,10 @@ load_dotenv()
 FRED_KEY = os.getenv("FRED_KEY", "")
 ECOS_KEY = os.getenv("ECOS_KEY", "")
 DIR = Path("data"); DIR.mkdir(exist_ok=True)
+
+# FRED 시리즈 ID 상수화
+RATE_FRED_ID   = "INTDSRKRM193N"    # Bank of Korea Base Rate (monthly)
+BOND10_FRED_ID = "IRLTLT01KRM156N"  # 10‑Year Government Bond Yield (monthly)
 
 # ── 공통 유틸 ───────────────────────────────────
 
@@ -98,7 +102,7 @@ def fetch_adj_close(ticker: str, *, start: str = "2008-01-01") -> pd.Series:
 
 
 # ── 1. 원시 시리즈 수집 ──────────────────────────
-fx   = fred("DEXKOUS");      fx.name  = "FX";      save("FX_raw", fx)
+fx   = fred("DEXKOUS");           fx.name  = "FX";      save("FX_raw", fx)
 
 gold = pd.read_csv(
     io.StringIO(requests.get("https://stooq.com/q/d/l/?s=xauusd&c=2008&f=sd2").text),
@@ -107,8 +111,12 @@ gold = pd.read_csv(
 gold = gold[gold.Close != "-"][["Date", "Close"]].set_index("Date").astype(float).squeeze()
 gold.index = pd.to_datetime(gold.index); gold.name = "Gold"; save("Gold_raw", gold)
 
-dxy  = fred("DTWEXM");       dxy.name = "DXY";     save("DXY_raw", dxy)
-rate = ecos("722Y001");      rate.name = "Rate";   save("Rate_month", rate)
+dxy  = fred("DTWEXM");            dxy.name = "DXY";     save("DXY_raw", dxy)
+
+# --- 기준금리 & 국채 10Y (FRED) ------------------------------------------------
+rate = fred(RATE_FRED_ID, freq="m", start="1964-01-01").rename("Rate");    save("Rate_month", rate)
+
+bond10 = fred(BOND10_FRED_ID, freq="m", start="2000-01-01").rename("Bond10"); save("Bond10_month", bond10)
 
 # --- M2 (순차 폴백) ----------------------------------------------------------
 _m2_candidates = [
@@ -118,16 +126,14 @@ _m2_candidates = [
 ]
 
 m2 = next((s for s in _m2_candidates if not s.empty), pd.Series(name="M2"))
-m2.name = "M2"; save("M2_month", m2)
-
-bond10 = fred("IRLTLT01KRM156N", freq="m");  bond10.name = "Bond10"; save("Bond10_month", bond10)
+save("M2_month", m2)
 
 kodex = fetch_adj_close("069500.KS").rename("KODEX200"); save("KODEX200_raw", kodex)
 
 # ── 2. 월→일 변환 ──────────────────────────────
-rate_d  = rate.resample("D").ffill()
+rate_d   = rate.resample("D").ffill()
 bond10_d = bond10.resample("D").ffill()
-m2_d    = m2.resample("D").interpolate("linear").rename("M2_D"); save("M2_daily", m2_d)
+m2_d     = m2.resample("D").interpolate("linear").rename("M2_D"); save("M2_daily", m2_d)
 
 # ── 3. 통합 & 저장 ─────────────────────────────
 all_df = (
