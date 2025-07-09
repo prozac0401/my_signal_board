@@ -40,6 +40,7 @@ jobs:
         ECOS_KEY:  ${{ secrets.ECOS_KEY }}
         MOLIT_KEY: ${{ secrets.MOLIT_KEY }}
         RTMS_AREA: ${{ secrets.RTMS_AREA }}
+        RONE_KEY: ${{ secrets.RONE_KEY }}
       run: |
         echo "FRED_KEY length: ${#FRED_KEY}"
         echo "ECOS_KEY length: ${#ECOS_KEY}"
