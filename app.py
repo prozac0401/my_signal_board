@@ -183,17 +183,17 @@ with tab_rate:
         r = view[["Rate", "Bond10"]].copy()
 
         # ① 기준금리는 그대로 3-일 SMA 유지
-        r["Rate_MA3"] = r.Rate.rolling(3).mean()
+        r["Rate_MA3M"] = r.Rate.rolling(3*30).mean()
 
         # ② Bond10은 3-‘개월’ SMA (월말 데이터 가정)
         bond_m = r["Bond10"].resample("M").last()
-        r["Bond10_MA3M"] = bond_m.rolling(3).mean().reindex(r.index, method="ffill")
+        r["Bond10_MA3M"] = bond_m.rolling(3*30).mean().reindex(r.index, method="ffill")
 
         fig = px.line(
             r,
-            y=["Rate", "Rate_MA3", "Bond10", "Bond10_MA3M"],
+            y=["Rate", "Rate_MA3M", "Bond10", "Bond10_MA3M"],
             labels={"value": "%", "variable": ""},
-            title="🇰🇷 기준금리 vs 10Y 국채수익률 · 3일·3개월 SMA"
+            title="🇰🇷 기준금리 vs 10Y 국채수익률 · 3개월 SMA"
         )
         st.plotly_chart(fig, use_container_width=True)
 
