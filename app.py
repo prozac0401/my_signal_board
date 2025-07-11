@@ -2,56 +2,59 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 import plotly.graph_objects as go
-import plotly.express as px   # 테마·팔레트 확장 대비
+import plotly.express as px
 from pathlib import Path
 
-"""
-Macro Dashboard Overlay — 표준화 오버레이 전용 (2025‑07‑11)
-----------------------------------------------------------
-* **목표**  –  선택한 거시경제·자산 지표를 **0‑1 Min‑Max 표준화**하여 한 y축에 겹쳐서 보여줍니다.
-* **왜?**  단위·스케일이 다른 시계열을 원본 값 그대로 겹치면 값 범위가 작은 지표가 납작해지므로, 모든 지표를 기간 내 최대·최소로 정규화해 시각적으로 0‑1 범위에 ‘꽉 차게’ 매핑합니다.
-* **사용 방법**  사이드바에서 표시 기간을 조정하고, On/Off 스위치로 보고 싶은 지표를 고르세요. 그래프는 자동으로 업데이트됩니다.
-
-Data source ▶ `data/all_data.csv`  (日 단위)
-"""
-
-# ───────────────────────────────────────────────────────────────
-# 0. Page Config & Sidebar Help
-# ----------------------------------------------------------------
 st.set_page_config(
-    page_title="Macro Dashboard Overlay (Normalized)",
+    page_title="Macro Dashboard Overlay",
     page_icon="📈",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
-HELP_MD = """
-### 사용 가이드
-1. **표시 기간** 슬라이더로 원하는 날짜 구간을 지정합니다.
-2. **지표 On/Off** 스위치를 켜서 시계열을 선택합니다.
-3. 각 지표는 선택한 기간 내 `min‑max` 방식으로 **0–1** 로 정규화되어 한 그래프에 겹쳐집니다.
-
-> 📝 툴팁에는 정규화된 값(0–1)이 표시됩니다. 실제 단위‑값이 필요하면 원본 데이터를 참고하세요.
+# ───────────────────────────────────────────────────────────────
+# 📖 설명
+# ----------------------------------------------------------------
 """
+Macro Dashboard Overlay v3 (2025‑07‑11)
+======================================
+* **목적**  – 원래 탭 구조(금·KODEX·M2·환율·금리)를 그대로 **On/Off 토글**로 제어해 **하나의 캔버스**에 겹쳐 시각화.
+* **주요 특징**
+    1. 각 탭에서 보이던 콘텐츠(이평선·YoY Bar 등)를 그대로 유지해 trace 로 추가.
+    2. **표준화(0‑1 Min‑Max)** 모드 기본값 → 모든 시계열이 y축을 꽉 채움.
+    3. Signal 탭 제외 – 시그널 카드는 별도 Expander 로 보존.
+"""
+
+# ───────────────────────────────────────────────────────────────
+# 0. 사이드바 – 도움말 / 옵션
+# ----------------------------------------------------------------
+HELP_MD = """
+### 사용 방법
+1. **표시 기간** 슬라이더로 날짜 구간을 지정합니다.  
+2. **탭별 토글**을 켜서, 보고 싶은 지표(탭)를 고릅니다.  
+   *예: ‘M2’ On → M2 월말·MA6·12 + YoY Bar 까지 한꺼번에 추가*  
+3. 기본 스케일은 `표준화` 입니다. 값 범위가 크게 다른 지표끼리 겹쳐도 직선으로 눌리지 않아요.
+"""
+
 with st.sidebar.expander("ℹ️ 도움말 · Help", expanded=False):
     st.markdown(HELP_MD)
 
 # ───────────────────────────────────────────────────────────────
-# 1. Load & Pre‑process Data
+# 1. 데이터 로드
 # ----------------------------------------------------------------
 DATA_FP = Path("data/all_data.csv")
 if not DATA_FP.exists():
     st.error("❌ data/all_data.csv 파일을 찾을 수 없습니다. 경로를 확인해 주세요.")
     st.stop()
 
-# csv → DataFrame (index: Date)
-df = (
+# 기본 데이터 + 파생 컬럼
+
+df: pd.DataFrame = (
     pd.read_csv(DATA_FP, index_col=0, parse_dates=True)
     .ffill()
     .loc["2008-01-01":]
 )
 
-# 파생 컬럼 ------------------------------------------------------
 if {"Gold", "FX"}.issubset(df.columns):
     df["Gold_KRWg"] = df["Gold"] * df["FX"] / 31.1035
 
@@ -64,78 +67,292 @@ if "M2_D" not in df.columns and "M2" in df.columns:
     df["M2_D"] = df["M2"].resample("D").interpolate("linear")
 
 # ───────────────────────────────────────────────────────────────
-# 2. Date Range Selection
+# 2. 기간 슬라이더 & View DF
 # ----------------------------------------------------------------
-st.sidebar.markdown("### 📅 표시 기간")
+with st.sidebar:
+    st.markdown("### 📅 표시 기간")
+    d0, d1 = df.index.min().date(), df.index.max().date()
+    _date = st.slider("기간", d0, d1, (d0, d1), format="YYYY-MM-DD")
+    d_from, d_to = _date
 
-d0, d1 = df.index.min().date(), df.index.max().date()
-d_from, d_to = st.sidebar.slider("기간", d0, d1, (d0, d1), format="YYYY-MM-DD")
 view = df.loc[pd.to_datetime(d_from) : pd.to_datetime(d_to)].copy()
-
 if view.empty:
     st.warning("선택한 기간에 데이터가 없습니다.")
     st.stop()
 
+sig_dt = view.index[-1].strftime("%Y-%m-%d")
+
 # ───────────────────────────────────────────────────────────────
-# 3. Indicator Toggles
+# 3. Trend·Macro 점수 (기존 코드 유지)
 # ----------------------------------------------------------------
-EXCLUDE = {"FX", "Rate", "Bond10"}  # 기본 숨김 또는 내부 계산용
 
-st.sidebar.markdown("### 🔀 지표 On / Off")
-selected_cols: list[str] = []
-for col in sorted(view.columns):
-    if col in EXCLUDE:
-        continue
-    friendly = col.replace("_", " ")
-    default_on = col in {"M2_D", "KODEX200"}
-    if st.sidebar.toggle(friendly, value=default_on, key=col):
-        selected_cols.append(col)
+def trend_score(series, short: int = 20, long: int = 50):
+    ma_s, ma_l = series.rolling(short).mean(), series.rolling(long).mean()
+    cross = np.sign(ma_s - ma_l)
+    mom_1m = np.sign(series.pct_change(21))
+    return (cross + mom_1m).clip(-2, 2)
 
-if not selected_cols:
-    st.warning("사이드바에서 최소 1개의 지표를 켜 주세요.")
+trend = {}
+if "Gold_KRWg" in view:
+    trend["Gold"] = trend_score(view["Gold_KRWg"])
+if "KODEX200" in view:
+    trend["KODEX"] = trend_score(view["KODEX200"])
+if "FX" in view:
+    trend["USDKRW"] = trend_score(view["FX"])
+
+s_gold = trend.get("Gold", pd.Series(dtype=float))
+s_kdx = trend.get("KODEX", pd.Series(dtype=float))
+s_fx = trend.get("USDKRW", pd.Series(dtype=float))
+
+# Macro score (M2 YoY + 금리 스프레드)
+macro = pd.Series(0, index=view.index)
+if "M2_D" in view:
+    month = view["M2_D"].resample("M").last()
+    m2_yoy = (month.pct_change(12) * 100).rename("M2_YoY")
+
+    def m2_cls(x):
+        if pd.isna(x):
+            return -1
+        if x > 9:
+            return 2
+        if x >= 6:
+            return 1
+        if x >= 3:
+            return -1
+        return -2
+
+    m2_score = m2_yoy.apply(m2_cls).reindex(view.index, method="ffill")
+    macro = macro.add(m2_score, fill_value=0)
+    s_m2 = m2_score
+else:
+    s_m2 = pd.Series(dtype=float)
+
+if {"Rate", "Bond10"}.issubset(view.columns):
+    spread = (view["Bond10"] - view["Rate"]).rolling(5).mean()
+    spread_score = spread.apply(lambda x: 1 if x > 0.5 else -1 if x < 0 else 0)
+    macro = macro.add(spread_score, fill_value=0)
+
+macro = macro.clip(-3, 3)
+
+# ───────────────────────────────────────────────────────────────
+# 4. 색상·유틸
+# ----------------------------------------------------------------
+COLORS = px.colors.qualitative.Plotly + px.colors.qualitative.Set2 + px.colors.qualitative.Set3
+
+SIG_COL_LINE = {2: "#16a085", 1: "#2ecc71", -1: "#f39c12", -2: "#e74c3c"}
+
+
+def vlines(sig: pd.Series, cmap=SIG_COL_LINE, min_gap="30D", width: int = 2):
+    ev = sig[sig.shift(1) != sig]
+    if isinstance(min_gap, str):
+        min_gap = pd.Timedelta(min_gap)
+    keep_idx, last_dt = [], None
+    for dt, val in ev.items():
+        if last_dt is None or dt - last_dt >= min_gap:
+            keep_idx.append(dt)
+            last_dt = dt
+    ev = ev.loc[keep_idx]
+    for dt, val in ev.items():
+        color = cmap.get(val, "#95a5a6")
+        yield {
+            "type": "line",
+            "x0": dt,
+            "x1": dt,
+            "yref": "paper",
+            "y0": 0,
+            "y1": 1,
+            "line": {"color": color, "width": width, "dash": "dot"},
+            "opacity": 0.4,
+        }
+
+# ───────────────────────────────────────────────────────────────
+# 5. Sidebar – 탭 토글 & 스케일 모드
+# ----------------------------------------------------------------
+TAB_KEYS = {
+    "Gold": "금 가격",
+    "KODEX": "KODEX 200",
+    "M2": "M2 통화량·YoY",
+    "USDKRW": "환율",
+    "Rate": "금리·10Y",
+}
+
+st.sidebar.markdown("### 🔀 탭 On / Off")
+selected_tabs = []
+for i, (key, label) in enumerate(TAB_KEYS.items()):
+    default_on = key in {"Gold", "KODEX"}
+    if st.sidebar.toggle(label, value=default_on, key=f"tab_{key}"):
+        selected_tabs.append(key)
+
+if not selected_tabs:
+    st.warning("사이드바에서 최소 1개의 탭을 켜 주세요.")
     st.stop()
 
+st.sidebar.markdown("### ⚖️ 값 스케일")
+scale_mode = st.sidebar.radio("값 스케일", ("원본 값", "표준화 (0‑1 Min‑Max)"), index=1)
+
+def scaler(series: pd.Series):
+    if scale_mode.startswith("표준화"):
+        rng = series.max() - series.min()
+        return (series - series.min()) / rng if rng != 0 else 0
+    return series
+
 # ───────────────────────────────────────────────────────────────
-# 4. Normalize & Plot
+# 6. Figure – 선택 탭 Trace 합성
 # ----------------------------------------------------------------
-plot_df = view[selected_cols].copy()
-
-# 0‑1 Min‑Max 정규화 ------------------------------------------------
-plot_df = plot_df.apply(lambda s: (s - s.min()) / (s.max() - s.min()) if (s.max() - s.min()) != 0 else 0)
-
-color_seq = px.colors.qualitative.Set2 + px.colors.qualitative.Set3
 fig = go.Figure()
+color_iter = iter(COLORS)
 
-for i, col in enumerate(plot_df.columns):
-    fig.add_scatter(
-        x=plot_df.index,
-        y=plot_df[col],
-        name=col.replace("_", " "),
-        mode="lines",
-        line=dict(width=2, color=color_seq[i % len(color_seq)]),
-        opacity=0.9,
-    )
+for tab in selected_tabs:
+    if tab == "Gold" and "Gold_KRWg" in view:
+        g = view[["Gold_KRWg"]].rename(columns={"Gold_KRWg": "Gold"})
+        for ma in (20, 50, 120):
+            g[f"MA{ma}"] = g["Gold"].rolling(ma).mean()
+        for col in g.columns:
+            fig.add_scatter(
+                x=g.index,
+                y=scaler(g[col]),
+                name=f"Gold {col}" if col != "Gold" else "Gold",
+                mode="lines",
+                line=dict(width=2, color=next(color_iter)),
+            )
+        for shp in vlines(s_gold):
+            fig.add_shape(shp)
 
+    elif tab == "KODEX" and "KODEX200" in view:
+        k = view[["KODEX200"]]
+        for ma in (20, 50, 120):
+            k[f"MA{ma}"] = k["KODEX200"].rolling(ma).mean()
+        for col in k.columns:
+            fig.add_scatter(
+                x=k.index,
+                y=scaler(k[col]),
+                name=f"KODEX {col}" if col != "KODEX200" else "KODEX200",
+                mode="lines",
+                line=dict(width=2, color=next(color_iter)),
+            )
+        for shp in vlines(s_kdx):
+            fig.add_shape(shp)
+
+    elif tab == "M2" and "M2_D" in view:
+        m = view["M2_D"].resample("M").last().to_frame("M2_M")
+        m["MA6"] = m.M2_M.rolling(6).mean()
+        m["MA12"] = m.M2_M.rolling(12).mean()
+        yoy = (m.M2_M.pct_change(12) * 100).rename("YoY%")
+
+        # Bar – YoY
+        fig.add_bar(
+            x=yoy.index,
+            y=scaler(yoy),
+            name="M2 YoY% (bar)",
+            opacity=0.45,
+            marker_color=next(color_iter),
+        )
+        # Lines – 월말 + MA6·12
+        for col in m.columns:
+            fig.add_scatter(
+                x=m.index,
+                y=scaler(m[col]),
+                name=f"{col}",
+                mode="lines",
+                line=dict(width=2, color=next(color_iter)),
+            )
+        for shp in vlines(s_m2):
+            fig.add_shape(shp)
+
+    elif tab == "USDKRW" and "FX" in view:
+        fx = view[["FX"]]
+        for ma in (20, 50, 120):
+            fx[f"MA{ma}"] = fx["FX"].rolling(ma).mean()
+        for col in fx.columns:
+            fig.add_scatter(
+                x=fx.index,
+                y=scaler(fx[col]),
+                name=f"FX {col}" if col != "FX" else "USD/KRW",
+                mode="lines",
+                line=dict(width=2, color=next(color_iter)),
+            )
+        for shp in vlines(s_fx):
+            fig.add_shape(shp)
+
+    elif tab == "Rate" and {"Rate", "Bond10"}.issubset(view.columns):
+        r = view[["Rate", "Bond10"]].copy()
+        rate_m = r["Rate"].resample("M").last()
+        bond_m = r["Bond10"].resample("M").last()
+        r["Rate_MA3M"] = rate_m.rolling(3).mean().reindex(r.index, method="ffill")
+        r["Bond10_MA3M"] = bond_m.rolling(3).mean().reindex(r.index, method="ffill")
+        for col in r.columns:
+            fig.add_scatter(
+                x=r.index,
+                y=scaler(r[col]),
+                name=col,
+                mode="lines",
+                line=dict(width=2, color=next(color_iter), dash="dot" if "MA" in col else "solid"),
+            )
+
+# ───────────────────────────────────────────────────────────────
+# 7. Figure Layout
+# ----------------------------------------------------------------
+y_title = "Value (원/%)" if scale_mode.startswith("원본") else "표준화 값 (0–1)"
 fig.update_layout(
-    height=580,
-    margin=dict(l=40, r=40, t=60, b=40),
-    title="선택 지표 Overlay – 표준화 (0‑1)",
-    xaxis_title="Date",
-    yaxis_title="표준화 값 (0–1)",
+    height=640,
+    title=f"선택한 탭 Overlay – {scale_mode}",
     hovermode="x unified",
     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+    yaxis_title=y_title,
+    margin=dict(l=40, r=40, t=60, b=40),
 )
 fig.update_xaxes(rangeslider_visible=True)
 
 st.plotly_chart(fig, use_container_width=True)
 
 # ───────────────────────────────────────────────────────────────
-# 5. Snapshot – 최근 원본 값 (informative)
+# 8. Snapshot (원본 값 기준)
 # ----------------------------------------------------------------
-st.markdown("### 최근 *원본* 값 Snapshot")
-cols = st.columns(len(selected_cols))
-for c, col in zip(cols, selected_cols):
-    last_val = view[col].iloc[-1]
-    c.metric(col.replace("_", " "), f"{last_val:,.2f}")
+snap_vals = {}
+if "Gold_KRWg" in view:
+    snap_vals["Gold (원/g)"] = view["Gold_KRWg"].iloc[-1]
+if "KODEX200" in view:
+    snap_vals["KODEX 200"] = view["KODEX200"].iloc[-1]
+if "FX" in view:
+    snap_vals["USD/KRW"] = view["FX"].iloc[-1]
+if "Rate" in view:
+    snap_vals["기준금리 (%)"] = view["Rate"].iloc[-1]
+if "Bond10" in view:
+    snap_vals["10Y (%)"] = view["Bond10"].iloc[-1]
+if "M2_D" in view:
+    snap_vals["M2 월말"] = view["M2_D"].resample("M").last().iloc[-1]
 
-# End of file
+st.markdown("### 최근 값 Snapshot")
+cols = st.columns(len(snap_vals))
+for (label, val), col in zip(snap_vals.items(), cols):
+    col.metric(label, f"{val:,.2f}")
+
+# ───────────────────────────────────────────────────────────────
+# 9. Signal 카드 (기존 로직 유지)
+# ----------------------------------------------------------------
+with st.expander("🔔 통합 자산 시그널", expanded=False):
+    final_scores = {}
+    for asset, ts in trend.items():
+        final_scores[asset] = int((ts + macro).clip(-3, 3).iloc[-1])
+
+    if "RTMS" in view:
+        realty_trend = view["RTMS"].pct_change(3).apply(
+            lambda x: 2 if x > 0.03 else 1 if x > 0 else -1 if x > -0.03 else -2
+        )
+        final_scores["Realty"] = int((realty_trend + macro).clip(-3, 3).iloc[-1])
+
+    st.write(f"### 기준일: {sig_dt}")
+    if final_scores:
+        _cols = st.columns(len(final_scores))
+        for (asset, score), c in zip(final_scores.items(), _cols):
+            c.markdown(
+                f"<div style='background:{SIG_COL_LINE.get(score, '#6c757d')};border-radius:8px;padding:20px 12px;text-align:center;color:white;'>"
+                f"<div style='font-size:18px;font-weight:600;'>{asset}</div>"
+                f"<div style='font-size:32px;font-weight:700;margin:4px 0;'>{score:+}</div>"
+                f"<div style='font-size:14px;opacity:.8;'>{sig_dt}</div></div>",
+                unsafe_allow_html=True,
+            )
+    else:
+        st.info("시그널을 계산할 데이터가 부족합니다.")
+
+st.caption("Data: FRED · Stooq · ECOS · Yahoo Finance — Signals = Macro(M2 + Spread) × Trend")
