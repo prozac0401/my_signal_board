@@ -44,7 +44,7 @@ with st.sidebar.expander("ℹ️ 도움말 · Help", expanded=False):
     st.markdown(HELP_MD)
 
 with st.sidebar.expander("ℹ️ M2 YoY 도움말", False):
-    st.markdown(HELP_MD, unsafe_allow_html=True)
+    st.markdown(HELP_MD2, unsafe_allow_html=True)
 
 # ───────────────────────────────────────────────────────────────
 # 1. 데이터 로드
