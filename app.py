@@ -81,6 +81,7 @@ with st.sidebar:
     st.markdown("### 📅 표시 기간")
 
     end_date = df.index.max().date()
+    #start_date = df.index.min().date()
     start_date = end_date - relativedelta(years=3)
     d0, d1 = start_date, end_date
     
@@ -93,6 +94,7 @@ with st.sidebar:
         format="YYYY-MM-DD",
         key="date_range"
     )
+    d_from, d_to = _date
     
 view = df.loc[pd.to_datetime(d_from) : pd.to_datetime(d_to)].copy()
 if view.empty:
