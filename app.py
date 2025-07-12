@@ -4,6 +4,7 @@ import streamlit as st
 import plotly.graph_objects as go
 import plotly.express as px
 from pathlib import Path
+from dateutil.relativedelta import relativedelta
 
 # ----------------------------------------------------------------
 st.set_page_config(
@@ -78,7 +79,11 @@ if "M2_D" not in df.columns and "M2" in df.columns:
 # ----------------------------------------------------------------
 with st.sidebar:
     st.markdown("### 📅 표시 기간")
-    d0, d1 = df.index.min().date(), df.index.max().date()
+
+    end_date = df.index.max().date()
+    start_date = end_date - relativedelta(years=3)
+    
+    d0, d1 = start_date, end_date
     _date = st.slider("기간", d0, d1, (d0, d1), format="YYYY-MM-DD")
     d_from, d_to = _date
 
