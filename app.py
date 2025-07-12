@@ -82,11 +82,18 @@ with st.sidebar:
 
     end_date = df.index.max().date()
     start_date = end_date - relativedelta(years=3)
-    
     d0, d1 = start_date, end_date
-    _date = st.slider("기간", d0, d1, (d0, d1), format="YYYY-MM-DD")
-    d_from, d_to = _date
+    
+    if "date_range" not in st.session_state:
+        st.session_state["date_range"] = (d0, d1)
 
+    _date = st.slider(
+        "기간", d0, d1,
+        st.session_state["date_range"],     # ← 여기
+        format="YYYY-MM-DD",
+        key="date_range"
+    )
+    
 view = df.loc[pd.to_datetime(d_from) : pd.to_datetime(d_to)].copy()
 if view.empty:
     st.warning("선택한 기간에 데이터가 없습니다.")
