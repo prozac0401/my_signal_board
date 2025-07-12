@@ -1,3 +1,9 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+app.py – Macro Dashboard Overlay (SP500 integrated)
+──────────────────────────────────────────────────
+"""
 import numpy as np
 import pandas as pd
 import streamlit as st
@@ -24,6 +30,7 @@ HELP_MD = """
    *예: ‘M2’ On → M2 월말·MA6·12 + YoY Bar 까지 한꺼번에 추가*  
 3. 기본 스케일은 `표준화` 입니다. 값 범위가 크게 다른 지표끼리 겹쳐도 직선으로 눌리지 않아요.
 """
+
 HELP_MD2 = """
 ### M2 YoY 4-단계 구간
 | 구간 | 해석 | 시사점 |
@@ -63,15 +70,26 @@ df: pd.DataFrame = (
     .loc["2008-01-01":]
 )
 
-if {"Gold", "FX"}.issubset(df.columns):
+# Gold 원화 환산
+a0_cols = df.columns
+if {"Gold", "FX"}.issubset(a0_cols):
     df["Gold_KRWg"] = df["Gold"] * df["FX"] / 31.1035
 
+# KODEX 200 컬럼 정규화
 for c in df.columns:
     if c.lower().replace(" ", "").startswith("kodex200") or "069500" in c.lower():
         df.rename(columns={c: "KODEX200"}, inplace=True)
         break
 
-if "M2_D" not in df.columns and "M2" in df.columns:
+# S&P 500 컬럼 정규화
+for c in df.columns:
+    if c.lower() in {"sp500", "^gspc"} or "sp500" in c.lower():
+        df.rename(columns={c: "SP500"}, inplace=True)
+        break
+
+# M2 일별 보간
+after_cols = df.columns
+if "M2_D" not in after_cols and "M2" in after_cols:
     df["M2_D"] = df["M2"].resample("D").interpolate("linear")
 
 # ───────────────────────────────────────────────────────────────
@@ -82,10 +100,10 @@ with st.sidebar:
 
     end_date = df.index.max().date()
     start_date = df.index.min().date()
-    #start_date = end_date - relativedelta(years=3)
+    mid_date = df.index.max().date() - relativedelta(years=3)
 
-    d0, d1 = start_date, end_date
-    _date = st.slider("기간", d0, d1, (d0, d1), format="YYYY-MM-DD", key="date_slider_3y")
+    d0, d1, d2 = start_date, end_date, mid_date
+    _date = st.slider("기간", d0, d1, (d2, d1), format="YYYY-MM-DD", key="date_slider_3y")
     d_from, d_to = _date
 
 view = df.loc[pd.to_datetime(d_from) : pd.to_datetime(d_to)].copy()
@@ -96,7 +114,7 @@ if view.empty:
 sig_dt = view.index[-1].strftime("%Y-%m-%d")
 
 # ───────────────────────────────────────────────────────────────
-# 3. Trend·Macro 점수 (기존 코드 유지)
+# 3. Trend·Macro 점수
 # ----------------------------------------------------------------
 
 def trend_score(series, short: int = 20, long: int = 50):
@@ -110,12 +128,10 @@ if "Gold_KRWg" in view:
     trend["Gold"] = trend_score(view["Gold_KRWg"])
 if "KODEX200" in view:
     trend["KODEX"] = trend_score(view["KODEX200"])
+if "SP500" in view:
+    trend["SP500"] = trend_score(view["SP500"])
 if "FX" in view:
     trend["USDKRW"] = trend_score(view["FX"])
-
-s_gold = trend.get("Gold", pd.Series(dtype=float))
-s_kdx = trend.get("KODEX", pd.Series(dtype=float))
-s_fx = trend.get("USDKRW", pd.Series(dtype=float))
 
 # Macro score (M2 YoY + 금리 스프레드)
 macro = pd.Series(0, index=view.index)
@@ -151,7 +167,6 @@ macro = macro.clip(-3, 3)
 # 4. 색상·유틸 및 월별 세로선 함수
 # ----------------------------------------------------------------
 COLORS = px.colors.qualitative.Plotly + px.colors.qualitative.Set2 + px.colors.qualitative.Set3
-
 SIG_COL_LINE = {2: "#16a085", 1: "#2ecc71", -1: "#f39c12", -2: "#e74c3c"}
 
 # Signal 라인을 완전히 비활성화 (빈 리스트 반환)
@@ -182,6 +197,7 @@ def add_monthly_guides(fig: go.Figure, start: pd.Timestamp, end: pd.Timestamp):
 TAB_KEYS = {
     "Gold": "금 가격",
     "KODEX": "KODEX 200",
+    "SP500": "S&P 500",
     "M2": "M2 통화량·YoY",
     "USDKRW": "환율",
     "Rate": "금리·10Y",
@@ -230,6 +246,7 @@ fig = go.Figure()
 color_iter = iter(COLORS)
 
 for tab in selected_tabs:
+    # Gold (원/g)
     if tab == "Gold" and "Gold_KRWg" in view:
         g = view[["Gold_KRWg"]].rename(columns={"Gold_KRWg": "Gold"})
         if aux_enabled["Gold"]:
@@ -244,6 +261,7 @@ for tab in selected_tabs:
                 line=dict(width=2, color=next(color_iter)),
             )
 
+    # KODEX 200
     elif tab == "KODEX" and "KODEX200" in view:
         k = view[["KODEX200"]]
         if aux_enabled["KODEX"]:
@@ -258,13 +276,28 @@ for tab in selected_tabs:
                 line=dict(width=2, color=next(color_iter)),
             )
 
+    # S&P 500
+    elif tab == "SP500" and "SP500" in view:
+        s = view[["SP500"]]
+        if aux_enabled["SP500"]:
+            for ma in (20, 50, 120):
+                s[f"MA{ma}"] = s["SP500"].rolling(ma).mean()
+        for col in s.columns:
+            fig.add_scatter(
+                x=s.index,
+                y=scaler(s[col]),
+                name=f"S&P500 {col}" if col != "SP500" else "S&P 500",
+                mode="lines",
+                line=dict(width=2, color=next(color_iter)),
+            )
+
+    # M2
     elif tab == "M2" and "M2_D" in view:
         m = view["M2_D"].resample("M").last().to_frame("M2_M")
         if aux_enabled["M2"]:
             m["MA6"] = m.M2_M.rolling(6).mean()
             m["MA12"] = m.M2_M.rolling(12).mean()
             yoy = (m.M2_M.pct_change(12) * 100).rename("YoY%")
-            # Bar – YoY
             fig.add_bar(
                 x=yoy.index,
                 y=scaler(yoy),
@@ -281,6 +314,7 @@ for tab in selected_tabs:
                 line=dict(width=2, color=next(color_iter)),
             )
 
+    # USDKRW
     elif tab == "USDKRW" and "FX" in view:
         fx = view[["FX"]]
         if aux_enabled["USDKRW"]:
@@ -295,6 +329,7 @@ for tab in selected_tabs:
                 line=dict(width=2, color=next(color_iter)),
             )
 
+    # Rate & Bond10
     elif tab == "Rate" and {"Rate", "Bond10"}.issubset(view.columns):
         r = view[["Rate", "Bond10"]].copy()
         if aux_enabled["Rate"]:
@@ -311,7 +346,7 @@ for tab in selected_tabs:
                 line=dict(width=2, color=next(color_iter), dash="dot" if "MA" in col else "solid"),
             )
 
-# 월별 세로 가이드라인을 한 번만 추가
+# 월별 세로 가이드라인 추가
 add_monthly_guides(fig, view.index.min(), view.index.max())
 
 # ───────────────────────────────────────────────────────────────
@@ -333,11 +368,14 @@ st.plotly_chart(fig, use_container_width=True)
 # ───────────────────────────────────────────────────────────────
 # 9. Snapshot (원본 값 기준)
 # ----------------------------------------------------------------
+
 snap_vals = {}
 if "Gold_KRWg" in view:
     snap_vals["Gold (원/g)"] = view["Gold_KRWg"].iloc[-1]
 if "KODEX200" in view:
     snap_vals["KODEX 200"] = view["KODEX200"].iloc[-1]
+if "SP500" in view:
+    snap_vals["S&P 500"] = view["SP500"].iloc[-1]
 if "FX" in view:
     snap_vals["USD/KRW"] = view["FX"].iloc[-1]
 if "Rate" in view:
