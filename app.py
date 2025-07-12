@@ -81,8 +81,8 @@ with st.sidebar:
     st.markdown("### 📅 표시 기간")
 
     end_date = df.index.max().date()
-    #start_date = df.index.min().date()
-    start_date = end_date - relativedelta(years=3)
+    start_date = df.index.min().date()
+    #start_date = end_date - relativedelta(years=3)
     d0, d1 = start_date, end_date
     
     if "date_range" not in st.session_state:
