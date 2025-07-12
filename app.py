@@ -21,9 +21,11 @@ HELP_MD = """
 ### 사용 방법
 1. **표시 기간** 슬라이더로 날짜 구간을 지정합니다.  
 2. **탭별 토글**을 켜서, 보고 싶은 지표(탭)를 고릅니다.  
-   *예: ‘M2’ On → M2 월말·MA6·12 + YoY Bar 까지 한꺼번에 추가*  
-3. 기본 스케일은 `표준화` 입니다. 값 범위가 크게 다른 지표끼리 겹쳐도 직선으로 눌리지 않아요.
+3. **보조 지표** 토글로 이동평균·YoY Bar 등 부가 정보를 켜고 끌 수 있습니다.  
+   *특정 지표를 처음 On 할 때, 보조 지표는 기본적으로 Off*  
+4. 기본 스케일은 `표준화` 입니다. 값 범위가 크게 다른 지표끼리 겹쳐도 직선으로 눌리지 않아요.
 """
+
 HELP_MD2 = """
 ### M2 YoY 4-단계 구간
 | 구간 | 해석 | 시사점 |
@@ -56,7 +58,6 @@ if not DATA_FP.exists():
     st.stop()
 
 # 기본 데이터 + 파생 컬럼
-
 df: pd.DataFrame = (
     pd.read_csv(DATA_FP, index_col=0, parse_dates=True)
     .ffill()
@@ -79,10 +80,9 @@ if "M2_D" not in df.columns and "M2" in df.columns:
 # ----------------------------------------------------------------
 with st.sidebar:
     st.markdown("### 📅 표시 기간")
-
+    
     end_date = df.index.max().date()
     start_date = df.index.min().date()
-    #start_date = end_date - relativedelta(years=3)
     d0, d1 = start_date, end_date
     
     if "date_range" not in st.session_state:
@@ -90,12 +90,12 @@ with st.sidebar:
 
     _date = st.slider(
         "기간", d0, d1,
-        st.session_state["date_range"],     # ← 여기
+        st.session_state["date_range"],
         format="YYYY-MM-DD",
-        key="date_range"
+        key="date_range",
     )
     d_from, d_to = _date
-    
+
 view = df.loc[pd.to_datetime(d_from) : pd.to_datetime(d_to)].copy()
 if view.empty:
     st.warning("선택한 기간에 데이터가 없습니다.")
@@ -107,7 +107,7 @@ sig_dt = view.index[-1].strftime("%Y-%m-%d")
 # 3. Trend·Macro 점수 (기존 코드 유지)
 # ----------------------------------------------------------------
 
-def trend_score(series, short: int = 20, long: int = 50):
+def trend_score(series: pd.Series, short: int = 20, long: int = 50):
     ma_s, ma_l = series.rolling(short).mean(), series.rolling(long).mean()
     cross = np.sign(ma_s - ma_l)
     mom_1m = np.sign(series.pct_change(21))
@@ -199,7 +199,7 @@ TAB_KEYS = {
 
 st.sidebar.markdown("### 🔀 탭 On / Off")
 selected_tabs = []
-for i, (key, label) in enumerate(TAB_KEYS.items()):
+for key, label in TAB_KEYS.items():
     default_on = key in {"Gold", "KODEX"}
     if st.sidebar.toggle(label, value=default_on, key=f"tab_{key}"):
         selected_tabs.append(key)
@@ -207,6 +207,26 @@ for i, (key, label) in enumerate(TAB_KEYS.items()):
 if not selected_tabs:
     st.warning("사이드바에서 최소 1개의 탭을 켜 주세요.")
     st.stop()
+
+# 5‑2. 보조 지표 토글 UI
+aux_settings = {}
+if selected_tabs:
+    st.sidebar.markdown("### ⚙️ 보조 지표 옵션")
+    for tab in selected_tabs:
+        # 공통 이동평균 (20/50/120)
+        if tab in {"Gold", "KODEX", "USDKRW"}:
+            aux_settings[f"{tab}_MA"] = st.sidebar.toggle(
+                f"{TAB_KEYS[tab]} 이동평균(MA)",
+                value=False,
+                key=f"aux_{tab}_MA",
+            )
+        # M2 : MA6·12 & YoY Bar
+        if tab == "M2":
+            aux_settings["M2_MA"] = st.sidebar.toggle("M2 MA6·MA12", False, key="aux_M2_MA")
+            aux_settings["M2_YoY"] = st.sidebar.toggle("M2 YoY% Bar", False, key="aux_M2_YoY")
+        # 금리/채권 : 3M 이동평균
+        if tab == "Rate":
+            aux_settings["Rate_MA"] = st.sidebar.toggle("금리·채권 MA3M", False, key="aux_Rate_MA")
 
 st.sidebar.markdown("### ⚖️ 값 스케일")
 scale_mode = st.sidebar.radio("값 스케일", ("원본 값", "표준화 (0‑1 Min‑Max)"), index=1)
@@ -224,91 +244,138 @@ fig = go.Figure()
 color_iter = iter(COLORS)
 
 for tab in selected_tabs:
+    # ------------------------------------------------------------------
+    # GOLD
     if tab == "Gold" and "Gold_KRWg" in view:
         g = view[["Gold_KRWg"]].rename(columns={"Gold_KRWg": "Gold"})
-        for ma in (20, 50, 120):
-            g[f"MA{ma}"] = g["Gold"].rolling(ma).mean()
-        for col in g.columns:
-            fig.add_scatter(
-                x=g.index,
-                y=scaler(g[col]),
-                name=f"Gold {col}" if col != "Gold" else "Gold",
-                mode="lines",
-                line=dict(width=2, color=next(color_iter)),
-            )
+        # 기본 라인
+        fig.add_scatter(
+            x=g.index,
+            y=scaler(g["Gold"]),
+            name="Gold",
+            mode="lines",
+            line=dict(width=2, color=next(color_iter)),
+        )
+        # 선택적 이동평균
+        if aux_settings.get("Gold_MA"):
+            for ma in (20, 50, 120):
+                fig.add_scatter(
+                    x=g.index,
+                    y=scaler(g["Gold"].rolling(ma).mean()),
+                    name=f"Gold MA{ma}",
+                    mode="lines",
+                    line=dict(width=2, color=next(color_iter), dash="dot"),
+                )
         for shp in vlines(s_gold):
             fig.add_shape(shp)
 
+    # ------------------------------------------------------------------
+    # KODEX 200
     elif tab == "KODEX" and "KODEX200" in view:
         k = view[["KODEX200"]]
-        for ma in (20, 50, 120):
-            k[f"MA{ma}"] = k["KODEX200"].rolling(ma).mean()
-        for col in k.columns:
-            fig.add_scatter(
-                x=k.index,
-                y=scaler(k[col]),
-                name=f"KODEX {col}" if col != "KODEX200" else "KODEX200",
-                mode="lines",
-                line=dict(width=2, color=next(color_iter)),
-            )
+        fig.add_scatter(
+            x=k.index,
+            y=scaler(k["KODEX200"]),
+            name="KODEX200",
+            mode="lines",
+            line=dict(width=2, color=next(color_iter)),
+        )
+        if aux_settings.get("KODEX_MA"):
+            for ma in (20, 50, 120):
+                fig.add_scatter(
+                    x=k.index,
+                    y=scaler(k["KODEX200"].rolling(ma).mean()),
+                    name=f"KODEX MA{ma}",
+                    mode="lines",
+                    line=dict(width=2, color=next(color_iter), dash="dot"),
+                )
         for shp in vlines(s_kdx):
             fig.add_shape(shp)
 
+    # ------------------------------------------------------------------
+    # M2
     elif tab == "M2" and "M2_D" in view:
         m = view["M2_D"].resample("M").last().to_frame("M2_M")
-        m["MA6"] = m.M2_M.rolling(6).mean()
-        m["MA12"] = m.M2_M.rolling(12).mean()
-        yoy = (m.M2_M.pct_change(12) * 100).rename("YoY%")
-
-        # Bar – YoY
-        fig.add_bar(
-            x=yoy.index,
-            y=scaler(yoy),
-            name="M2 YoY% (bar)",
-            opacity=0.45,
-            marker_color=next(color_iter),
+        # 기본 월말 라인
+        fig.add_scatter(
+            x=m.index,
+            y=scaler(m["M2_M"]),
+            name="M2 월말",
+            mode="lines",
+            line=dict(width=2, color=next(color_iter)),
         )
-        # Lines – 월말 + MA6·12
-        for col in m.columns:
-            fig.add_scatter(
-                x=m.index,
-                y=scaler(m[col]),
-                name=f"{col}",
-                mode="lines",
-                line=dict(width=2, color=next(color_iter)),
+        # 선택적 MA6/12
+        if aux_settings.get("M2_MA"):
+            for ma in (6, 12):
+                fig.add_scatter(
+                    x=m.index,
+                    y=scaler(m["M2_M"].rolling(ma).mean()),
+                    name=f"M2 MA{ma}",
+                    mode="lines",
+                    line=dict(width=2, color=next(color_iter), dash="dot"),
+                )
+        # 선택적 YoY 바
+        if aux_settings.get("M2_YoY"):
+            yoy = (m["M2_M"].pct_change(12) * 100).rename("YoY%")
+            fig.add_bar(
+                x=yoy.index,
+                y=scaler(yoy),
+                name="M2 YoY% (bar)",
+                opacity=0.45,
+                marker_color=next(color_iter),
             )
         for shp in vlines(s_m2):
             fig.add_shape(shp)
 
+    # ------------------------------------------------------------------
+    # USD/KRW FX
     elif tab == "USDKRW" and "FX" in view:
         fx = view[["FX"]]
-        for ma in (20, 50, 120):
-            fx[f"MA{ma}"] = fx["FX"].rolling(ma).mean()
-        for col in fx.columns:
-            fig.add_scatter(
-                x=fx.index,
-                y=scaler(fx[col]),
-                name=f"FX {col}" if col != "FX" else "USD/KRW",
-                mode="lines",
-                line=dict(width=2, color=next(color_iter)),
-            )
+        fig.add_scatter(
+            x=fx.index,
+            y=scaler(fx["FX"]),
+            name="USD/KRW",
+            mode="lines",
+            line=dict(width=2, color=next(color_iter)),
+        )
+        if aux_settings.get("USDKRW_MA"):
+            for ma in (20, 50, 120):
+                fig.add_scatter(
+                    x=fx.index,
+                    y=scaler(fx["FX"].rolling(ma).mean()),
+                    name=f"FX MA{ma}",
+                    mode="lines",
+                    line=dict(width=2, color=next(color_iter), dash="dot"),
+                )
         for shp in vlines(s_fx):
             fig.add_shape(shp)
 
+    # ------------------------------------------------------------------
+    # Rate & Bond10
     elif tab == "Rate" and {"Rate", "Bond10"}.issubset(view.columns):
         r = view[["Rate", "Bond10"]].copy()
-        rate_m = r["Rate"].resample("M").last()
-        bond_m = r["Bond10"].resample("M").last()
-        r["Rate_MA3M"] = rate_m.rolling(3).mean().reindex(r.index, method="ffill")
-        r["Bond10_MA3M"] = bond_m.rolling(3).mean().reindex(r.index, method="ffill")
-        for col in r.columns:
+        # 기본 라인: Spot 금리 & 10Y
+        for col in ["Rate", "Bond10"]:
             fig.add_scatter(
                 x=r.index,
                 y=scaler(r[col]),
                 name=col,
                 mode="lines",
-                line=dict(width=2, color=next(color_iter), dash="dot" if "MA" in col else "solid"),
+                line=dict(width=2, color=next(color_iter)),
             )
+        if aux_settings.get("Rate_MA"):
+            rate_m = r["Rate"].resample("M").last()
+            bond_m = r["Bond10"].resample("M").last()
+            r["Rate_MA3M"] = rate_m.rolling(3).mean().reindex(r.index, method="ffill")
+            r["Bond10_MA3M"] = bond_m.rolling(3).mean().reindex(r.index, method="ffill")
+            for col in ["Rate_MA3M", "Bond10_MA3M"]:
+                fig.add_scatter(
+                    x=r.index,
+                    y=scaler(r[col]),
+                    name=col,
+                    mode="lines",
+                    line=dict(width=2, color=next(color_iter), dash="dot"),
+                )
 
 # ───────────────────────────────────────────────────────────────
 # 7. Figure Layout
