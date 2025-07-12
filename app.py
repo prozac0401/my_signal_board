@@ -81,8 +81,7 @@ with st.sidebar:
     st.markdown("### 📅 표시 기간")
 
     end_date = df.index.max().date()
-    start_date = df.index.min().date()
-    #start_date = end_date - relativedelta(years=3)
+    start_date = end_date - relativedelta(years=3)
 
     d0, d1 = start_date, end_date
     _date = st.slider("기간", d0, d1, (d0, d1), format="YYYY-MM-DD", key="date_slider_3y")
@@ -148,17 +147,33 @@ if {"Rate", "Bond10"}.issubset(view.columns):
 macro = macro.clip(-3, 3)
 
 # ───────────────────────────────────────────────────────────────
-# 4. 색상·유틸
+# 4. 색상·유틸 및 월별 세로선 함수
 # ----------------------------------------------------------------
 COLORS = px.colors.qualitative.Plotly + px.colors.qualitative.Set2 + px.colors.qualitative.Set3
 
 SIG_COL_LINE = {2: "#16a085", 1: "#2ecc71", -1: "#f39c12", -2: "#e74c3c"}
 
-# --- Signal 라인 제거를 위해 vlines 함수 무력화 ---
+# Signal 라인을 완전히 비활성화 (빈 리스트 반환)
 
 def vlines(*args, **kwargs):
-    """Signal 선(세로선)을 비활성화하기 위해 빈 리스트 반환"""
     return []
+
+# 매월 1일에 얇은 세로선 추가 – 한 번만 실행
+
+def add_monthly_guides(fig: go.Figure, start: pd.Timestamp, end: pd.Timestamp):
+    """주어진 구간의 매월 1일에 세로선을 한 번씩 추가합니다."""
+    for dt in pd.date_range(start=start.normalize(), end=end.normalize(), freq="MS"):
+        fig.add_shape(
+            type="line",
+            x0=dt,
+            x1=dt,
+            yref="paper",
+            y0=0,
+            y1=1,
+            line=dict(color="#bdc3c7", width=1, dash="dot"),
+            opacity=0.3,
+            layer="below",
+        )
 
 # ───────────────────────────────────────────────────────────────
 # 5. Sidebar – 탭 토글 & 스케일 모드 + 보조 지표 토글
@@ -191,13 +206,7 @@ scale_mode = st.sidebar.radio("값 스케일", ("원본 값", "표준화 (0‑1 
 
 st.sidebar.markdown("### ✨ 보조 지표")
 
-AUX_DEFAULTS = {
-    "Gold": False,
-    "KODEX": False,
-    "M2": False,
-    "USDKRW": False,
-    "Rate": False,
-}
+AUX_DEFAULTS = {k: False for k in TAB_KEYS}
 
 aux_enabled = {}
 for k in selected_tabs:
@@ -262,9 +271,6 @@ for tab in selected_tabs:
                 opacity=0.45,
                 marker_color=next(color_iter),
             )
-        else:
-            m.drop(columns=[], inplace=True)
-        # Lines – 월말 + (선택) MA6·12
         for col in m.columns:
             fig.add_scatter(
                 x=m.index,
@@ -304,10 +310,13 @@ for tab in selected_tabs:
                 line=dict(width=2, color=next(color_iter), dash="dot" if "MA" in col else "solid"),
             )
 
+# 월별 세로 가이드라인을 한 번만 추가
+add_monthly_guides(fig, view.index.min(), view.index.max())
+
 # ───────────────────────────────────────────────────────────────
 # 8. Figure Layout
 # ----------------------------------------------------------------
-y_title = "Value (원/%)" if scale_mode.startswith("원본") else "표준화 값 (0–1)"
+y_title = "Value (원/%" if scale_mode.startswith("원본") else "표준화 값 (0–1)"
 fig.update_layout(
     height=640,
     title=f"선택한 탭 Overlay – {scale_mode}",
@@ -321,7 +330,7 @@ fig.update_xaxes(rangeslider_visible=True)
 st.plotly_chart(fig, use_container_width=True)
 
 # ───────────────────────────────────────────────────────────────
-# 8. Snapshot (원본 값 기준)
+# 9. Snapshot (원본 값 기준)
 # ----------------------------------------------------------------
 snap_vals = {}
 if "Gold_KRWg" in view:
@@ -343,7 +352,7 @@ for (label, val), col in zip(snap_vals.items(), cols):
     col.metric(label, f"{val:,.2f}")
 
 # ───────────────────────────────────────────────────────────────
-# 9. Signal 카드 (기존 로직 유지)
+# 10. Signal 카드 (기존 로직 유지)
 # ----------------------------------------------------------------
 with st.expander("🔔 통합 자산 시그널", expanded=False):
     final_scores = {}
