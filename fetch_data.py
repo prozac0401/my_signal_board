@@ -37,6 +37,8 @@ DIR = Path("data"); DIR.mkdir(exist_ok=True)
 # FRED 시리즈 ID 상수화
 RATE_FRED_ID   = "INTDSRKRM193N"    # Bank of Korea Base Rate (monthly)
 BOND10_FRED_ID = "IRLTLT01KRM156N"  # 10‑Year Government Bond Yield (monthly)
+CPI_FRED_ID    = "CPIAUCSL"          # CPI All Items (monthly)
+CORECPI_FRED_ID = "CPILFESL"         # Core CPI (monthly)
 
 # ── 공통 유틸 ───────────────────────────────────
 
@@ -125,6 +127,17 @@ dxy  = fred("DTWEXM");                      dxy.name = "DXY";       save("DXY_ra
 rate   = fred(RATE_FRED_ID, freq="m", start="1964-01-01").rename("Rate");      save("Rate_month", rate)
 bond10 = fred(BOND10_FRED_ID, freq="m", start="2000-01-01").rename("Bond10");  save("Bond10_month", bond10)
 
+# --- 물가 (FRED) --------------------------------------------------------------
+cpi = fred(CPI_FRED_ID, freq="m", start="2000-01-01").rename("CPI")
+save("CPI_month", cpi)
+core_cpi = fred(CORECPI_FRED_ID, freq="m", start="2000-01-01").rename("CoreCPI")
+save("CoreCPI_month", core_cpi)
+
+# Real Rate = 정책금리 - CPI YoY
+cpi_yoy = cpi.pct_change(12) * 100
+real_rate = (rate - cpi_yoy).rename("RealRate")
+save("RealRate_month", real_rate)
+
 # --- 미국 M2 (FRED) ------------------------------------------------------------
 m2_us = fred("M2SL", freq="m", start="2008-01-01").rename("M2_US")
 save("M2_US_month", m2_us)
@@ -149,6 +162,9 @@ rate_d   = rate.resample("D").ffill()
 bond10_d = bond10.resample("D").ffill()
 m2_d     = m2.resample("D").interpolate("linear").rename("M2_D");          save("M2_daily", m2_d)
 m2_us_d  = m2_us.resample("D").interpolate("linear").rename("M2_US_D");      save("M2_US_daily", m2_us_d)
+cpi_d     = cpi.resample("D").ffill().rename("CPI_D");            save("CPI_daily", cpi_d)
+core_cpi_d = core_cpi.resample("D").ffill().rename("CoreCPI_D");  save("CoreCPI_daily", core_cpi_d)
+real_rate_d = real_rate.resample("D").ffill().rename("RealRate_D"); save("RealRate_daily", real_rate_d)
 
 # 금리 스프레드(10Y - 정책금리) 5일 평균
 spread5d = (bond10_d - rate_d).rolling(5).mean().rename("Spread5D")
@@ -167,6 +183,9 @@ all_df = (
             spread5d,
             m2_d,
             m2_us_d,
+            cpi_d,
+            core_cpi_d,
+            real_rate_d,
             sp500,
             kodex,
             btc,
