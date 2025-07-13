@@ -219,6 +219,9 @@ TAB_KEYS = {
     "M2US": "미국 M2 통화량·YoY",
     "USDKRW": "환율",
     "Rate": "금리·10Y",
+    "CPI": "CPI",
+    "CoreCPI": "근원 CPI",
+    "RealRate": "실질 금리",
 }
 
 st.sidebar.markdown("### 🔀 탭 On / Off")
@@ -389,6 +392,58 @@ for tab in selected_tabs:
                 line=dict(width=2, color=next(color_iter)),
             )
 
+    # CPI
+    elif tab == "CPI" and "CPI_D" in view:
+        c = view["CPI_D"].resample("ME").last().to_frame("CPI")
+        if aux_enabled.get("CPI"):
+            yoy = (c.CPI.pct_change(12) * 100).rename("YoY%")
+            fig.add_bar(
+                x=yoy.index,
+                y=scaler(yoy),
+                name="CPI YoY% (bar)",
+                opacity=0.45,
+                marker_color=next(color_iter),
+            )
+        fig.add_scatter(
+            x=c.index,
+            y=scaler(c["CPI"]),
+            name="CPI",
+            mode="lines",
+            line=dict(width=2, color=next(color_iter)),
+        )
+
+    # Core CPI
+    elif tab == "CoreCPI" and "CoreCPI_D" in view:
+        c = view["CoreCPI_D"].resample("ME").last().to_frame("CoreCPI")
+        if aux_enabled.get("CoreCPI"):
+            yoy = (c.CoreCPI.pct_change(12) * 100).rename("YoY%")
+            fig.add_bar(
+                x=yoy.index,
+                y=scaler(yoy),
+                name="Core CPI YoY% (bar)",
+                opacity=0.45,
+                marker_color=next(color_iter),
+            )
+        fig.add_scatter(
+            x=c.index,
+            y=scaler(c["CoreCPI"]),
+            name="Core CPI",
+            mode="lines",
+            line=dict(width=2, color=next(color_iter)),
+        )
+
+    # Real Rate
+    elif tab == "RealRate" and "RealRate_D" in view:
+        r = view["RealRate_D"].resample("ME").last().to_frame("RealRate")
+        for col in r.columns:
+            fig.add_scatter(
+                x=r.index,
+                y=scaler(r[col]),
+                name="Real Rate",
+                mode="lines",
+                line=dict(width=2, color=next(color_iter)),
+            )
+
     # Rate & Bond10
     elif tab == "Rate" and {"Rate", "Bond10"}.issubset(view.columns):
         r = view[["Rate", "Bond10"]].copy()
@@ -450,6 +505,12 @@ if "M2_D" in view:
     snap_vals["M2 월말"] = view["M2_D"].resample("ME").last().iloc[-1]
 if "M2_US_D" in view:
     snap_vals["미국 M2 월말"] = view["M2_US_D"].resample("ME").last().iloc[-1]
+if "CPI_D" in view:
+    snap_vals["CPI"] = view["CPI_D"].resample("ME").last().iloc[-1]
+if "CoreCPI_D" in view:
+    snap_vals["Core CPI"] = view["CoreCPI_D"].resample("ME").last().iloc[-1]
+if "RealRate_D" in view:
+    snap_vals["Real Rate"] = view["RealRate_D"].resample("ME").last().iloc[-1]
 
 st.markdown("### 최근 값 Snapshot")
 
@@ -463,6 +524,9 @@ snap_units = {
     "10Y (%)": "%",
     "M2 월말": "₩",
     "미국 M2 월말": "$",
+    "CPI": "%",
+    "Core CPI": "%",
+    "Real Rate": "%",
 }
 
 snap_tbl = pd.DataFrame(
