@@ -615,15 +615,17 @@ snap_units = {
     "10Y (%)": "%",
     "연준금리 (%)": "%",
     "미국10Y (%)": "%",
-    "국내 M2 월말": "₩",
+    "국내 M2 월말": " ₩B",
     "미국 M2 월말": " B",
     "CPI": "",
     "Real Rate": "%",
 }
 
 def _fmt(val: float, unit: str) -> str:
-    if unit == "₩":
-        return f"{val:,.0f}{unit}"
+    u = unit.strip()
+    if u.startswith("₩"):
+        decimals = 0 if u == "₩" else 2
+        return f"{val:,.{decimals}f}{unit}"
     return f"{val:,.2f}{unit}"
 
 snap_tbl = pd.DataFrame(
