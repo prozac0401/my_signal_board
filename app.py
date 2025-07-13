@@ -49,16 +49,16 @@ REL_MD = {
         "\n- **금리** 하락과 함께 **M2**가 재가속하면 위험자산 비중 확대를 고려합니다."
     ),
     "Rate": (
-        "- **금리** 상승은 대체로 주식·부동산에 부정적 영향을 줍니다."
-        "\n- **금리**가 **CPI**보다 낮아 실질 금리가 마이너스면 **Gold**·**BTC** 비중 확대, 반대면 축소 신호입니다."
+        "- 국내외 **금리** 상승은 주식·부동산에 부정적 영향을 줍니다."
+        "\n- **금리**가 **CPI**보다 낮아 실질 금리가 마이너스면 **Gold**·**BTC** 비중 확대를 검토합니다."
     ),
     "USDKRW": (
         "- 환율 하락(원화 강세)은 해외자산 투자 비용을 낮춰 **SP500** 비중 확대 근거가 됩니다."
         "\n- 환율 상승과 **Gold** 가격 동반 상승 시 위험 회피 심리로 주식 비중 축소를 검토합니다."
     ),
     "CPI": (
-        "- 물가가 빠르게 오르면 중앙은행이 **금리** 인상을 검토해 위험자산에 부담입니다."
-        "\n- **CPI** 안정 속 **M2** 증가세면 경기 회복 신호로 주식·부동산 비중 확대를 고려합니다."
+        "- 물가 상승은 긴축 가능성을 높여 위험자산에 부담입니다."
+        "\n- 헤드라인·근원 **CPI** 흐름과 **실질금리**를 함께 보면 정책 방향을 가늠할 수 있습니다."
     ),
     "KODEX": (
         "- 국내 주식 지수로, **M2** 증가와 **금리** 하락 시 상승 가능성이 높아 비중 확대 신호입니다."
@@ -80,14 +80,6 @@ REL_MD = {
     "M2US": (
         "- 미국 **M2US**가 빠르게 증가하면 **SP500** 등 미국 자산에 우호적인 환경이 만들어집니다."
         "\n- 반대로 증가세가 둔화하면 미국 주식 비중을 줄일 근거가 됩니다."
-    ),
-    "RealRate": (
-        "- 실질 금리가 플러스일 때 안전자산 매력은 감소해 **Gold**·**BTC** 비중을 줄이고 주식 비중을 늘리는 쪽이 유리합니다."
-        "\n- 실질 금리가 마이너스 구간이면 금과 비트코인 선호가 높아집니다."
-    ),
-    "CoreCPI": (
-        "- **CoreCPI**가 상승세면 중앙은행이 **금리** 인상에 나설 가능성이 높습니다."
-        "\n- 헤드라인 **CPI**가 안정돼도 **CoreCPI**가 오르면 긴축 신호로 해석해 위험자산 비중을 줄일 수 있습니다."
     ),
 }
 
@@ -293,13 +285,11 @@ TAB_KEYS = {
     "KODEX": "KODEX 200",
     "SP500": "S&P 500",
     "BTC": "Bitcoin",
-    "M2": "M2 통화량·YoY",
-    "M2US": "미국 M2 통화량·YoY",
+    "M2": "국내 M2 통화량",
+    "M2US": "미국 M2 통화량",
     "USDKRW": "환율",
-    "Rate": "금리·10Y",
-    "CPI": "CPI",
-    "CoreCPI": "근원 CPI",
-    "RealRate": "실질 금리",
+    "Rate": "국내·미국 금리/10Y",
+    "CPI": "CPI·근원·실질금리",
 }
 
 st.sidebar.markdown("### 🔀 탭 On / Off")
@@ -480,11 +470,15 @@ for tab in selected_tabs:
                 line=dict(width=2, color=next(color_iter)),
             )
 
-    # CPI
-    elif tab == "CPI" and "CPI_D" in view:
-        c = view["CPI_D"].resample("ME").last().to_frame("CPI")
+    # CPI · Core CPI · Real Rate
+    elif tab == "CPI" and {"CPI_D", "CoreCPI_D", "RealRate_D"}.issubset(view.columns):
+        df_cpi = pd.DataFrame({
+            "CPI": view["CPI_D"].resample("ME").last(),
+            "CoreCPI": view["CoreCPI_D"].resample("ME").last(),
+            "RealRate": view["RealRate_D"].resample("ME").last(),
+        })
         if aux_enabled.get("CPI"):
-            yoy = (c.CPI.pct_change(12) * 100).rename("YoY%")
+            yoy = (df_cpi["CPI"].pct_change(12) * 100).rename("CPI YoY%")
             fig.add_bar(
                 x=yoy.index,
                 y=scaler(yoy),
@@ -492,54 +486,31 @@ for tab in selected_tabs:
                 opacity=0.45,
                 marker_color=next(color_iter),
             )
-        fig.add_scatter(
-            x=c.index,
-            y=scaler(c["CPI"]),
-            name="CPI",
-            mode="lines",
-            line=dict(width=2, color=next(color_iter)),
-        )
-
-    # Core CPI
-    elif tab == "CoreCPI" and "CoreCPI_D" in view:
-        c = view["CoreCPI_D"].resample("ME").last().to_frame("CoreCPI")
-        if aux_enabled.get("CoreCPI"):
-            yoy = (c.CoreCPI.pct_change(12) * 100).rename("YoY%")
+            yoy2 = (df_cpi["CoreCPI"].pct_change(12) * 100).rename("Core CPI YoY%")
             fig.add_bar(
-                x=yoy.index,
-                y=scaler(yoy),
+                x=yoy2.index,
+                y=scaler(yoy2),
                 name="Core CPI YoY% (bar)",
                 opacity=0.45,
                 marker_color=next(color_iter),
             )
-        fig.add_scatter(
-            x=c.index,
-            y=scaler(c["CoreCPI"]),
-            name="Core CPI",
-            mode="lines",
-            line=dict(width=2, color=next(color_iter)),
-        )
-
-    # Real Rate
-    elif tab == "RealRate" and "RealRate_D" in view:
-        r = view["RealRate_D"].resample("ME").last().to_frame("RealRate")
-        for col in r.columns:
+        for col in df_cpi.columns:
             fig.add_scatter(
-                x=r.index,
-                y=scaler(r[col]),
-                name="Real Rate",
+                x=df_cpi.index,
+                y=scaler(df_cpi[col]),
+                name=col,
                 mode="lines",
                 line=dict(width=2, color=next(color_iter)),
             )
 
-    # Rate & Bond10
-    elif tab == "Rate" and {"Rate", "Bond10"}.issubset(view.columns):
-        r = view[["Rate", "Bond10"]].copy()
+    # Rate & Bond10 (KR/US)
+    elif tab == "Rate" and {"Rate", "Bond10", "Rate_US", "Bond10_US"}.intersection(view.columns):
+        cols = [c for c in ["Rate", "Bond10", "Rate_US", "Bond10_US"] if c in view]
+        r = view[cols].copy()
         if aux_enabled["Rate"]:
-            rate_m = r["Rate"].resample("ME").last()
-            bond_m = r["Bond10"].resample("ME").last()
-            r["Rate_MA3M"] = rate_m.rolling(3).mean().reindex(r.index, method="ffill")
-            r["Bond10_MA3M"] = bond_m.rolling(3).mean().reindex(r.index, method="ffill")
+            for base_col in cols:
+                m = r[base_col].resample("ME").last()
+                r[f"{base_col}_MA3M"] = m.rolling(3).mean().reindex(r.index, method="ffill")
         for col in r.columns:
             fig.add_scatter(
                 x=r.index,
@@ -594,14 +565,16 @@ if "Rate" in view:
     snap_vals["기준금리 (%)"] = view["Rate"].iloc[-1]
 if "Bond10" in view:
     snap_vals["10Y (%)"] = view["Bond10"].iloc[-1]
+if "Rate_US" in view:
+    snap_vals["연준금리 (%)"] = view["Rate_US"].iloc[-1]
+if "Bond10_US" in view:
+    snap_vals["미국10Y (%)"] = view["Bond10_US"].iloc[-1]
 if "M2_D" in view:
-    snap_vals["M2 월말"] = view["M2_D"].resample("ME").last().iloc[-1]
+    snap_vals["국내 M2 월말"] = view["M2_D"].resample("ME").last().iloc[-1]
 if "M2_US_D" in view:
     snap_vals["미국 M2 월말"] = view["M2_US_D"].resample("ME").last().iloc[-1]
 if "CPI_D" in view:
     snap_vals["CPI"] = view["CPI_D"].resample("ME").last().iloc[-1]
-if "CoreCPI_D" in view:
-    snap_vals["Core CPI"] = view["CoreCPI_D"].resample("ME").last().iloc[-1]
 if "RealRate_D" in view:
     snap_vals["Real Rate"] = view["RealRate_D"].resample("ME").last().iloc[-1]
 
@@ -615,10 +588,11 @@ snap_units = {
     "USD/KRW": "₩",
     "기준금리 (%)": "%",
     "10Y (%)": "%",
-    "M2 월말": "₩",
+    "연준금리 (%)": "%",
+    "미국10Y (%)": "%",
+    "국내 M2 월말": "₩",
     "미국 M2 월말": "$",
     "CPI": "",
-    "Core CPI": "",
     "Real Rate": "%",
 }
 
