@@ -242,7 +242,11 @@ for k in selected_tabs:
 def scaler(series: pd.Series):
     if scale_mode.startswith("표준화"):
         rng = series.max() - series.min()
-        return (series - series.min()) / rng if rng != 0 else pd.Series(0, index=series.index)
+        
+        if rng != 0:
+            return (series - series.min()) / rng
+        return pd.Series(0, index=series.index)
+      
     return series
 
 # ───────────────────────────────────────────────────────────────
