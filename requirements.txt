@@ -5,3 +5,4 @@ yfinance
 streamlit
 plotly
 beautifulsoup4        # KRX 금 스크래핑용
+pytest
