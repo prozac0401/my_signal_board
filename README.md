@@ -20,7 +20,7 @@
 | USD/KRW | ECOS `731Y001` 또는 Investing.com CSV | 일 | (완료) |
 | KODEX 200 가격 | Investing.com `069500` CSV | 일 | (완료) |
 | 비트코인 가격 | Yahoo Finance `BTC-USD` | 일 | (완료) |
-| KRX 금 현물 | KRX 정보데이터시스템 `MDCMGZN001` | 일 | (예정) |
+| 금 현물 | - | 일 | (완료) |
 | 주택매매·전세가격지수 | 부동산원 R-ONE `(월) 지역별 매매지수_아파트` | 주·월 | (예정) |
 | 미분양주택 | 국토부 Open API `UnsoldHouseStatus` | 월 | (예정) |
 | 매수(우위)지수 | 부동산원 주간동향 HTML 크롤링 | 주 | (예정) |
