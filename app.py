@@ -130,6 +130,8 @@ if "KODEX200" in view:
     trend["KODEX"] = trend_score(view["KODEX200"])
 if "SP500" in view:
     trend["SP500"] = trend_score(view["SP500"])
+if "Bitcoin" in view:
+    trend["BTC"] = trend_score(view["Bitcoin"])
 if "FX" in view:
     trend["USDKRW"] = trend_score(view["FX"])
 
@@ -198,6 +200,7 @@ TAB_KEYS = {
     "Gold": "금 가격",
     "KODEX": "KODEX 200",
     "SP500": "S&P 500",
+    "BTC": "Bitcoin",
     "M2": "M2 통화량·YoY",
     "USDKRW": "환율",
     "Rate": "금리·10Y",
@@ -236,9 +239,11 @@ for k in selected_tabs:
 def scaler(series: pd.Series):
     if scale_mode.startswith("표준화"):
         rng = series.max() - series.min()
+        
         if rng != 0:
             return (series - series.min()) / rng
         return pd.Series(0, index=series.index)
+      
     return series
 
 # ───────────────────────────────────────────────────────────────
@@ -289,6 +294,21 @@ for tab in selected_tabs:
                 x=s.index,
                 y=scaler(s[col]),
                 name=f"S&P500 {col}" if col != "SP500" else "S&P 500",
+                mode="lines",
+                line=dict(width=2, color=next(color_iter)),
+            )
+
+    # Bitcoin
+    elif tab == "BTC" and "Bitcoin" in view:
+        b = view[["Bitcoin"]]
+        if aux_enabled["BTC"]:
+            for ma in (20, 50, 120):
+                b[f"MA{ma}"] = b["Bitcoin"].rolling(ma).mean()
+        for col in b.columns:
+            fig.add_scatter(
+                x=b.index,
+                y=scaler(b[col]),
+                name=f"BTC {col}" if col != "Bitcoin" else "Bitcoin",
                 mode="lines",
                 line=dict(width=2, color=next(color_iter)),
             )
@@ -380,6 +400,8 @@ if "KODEX200" in view:
     snap_vals["KODEX 200"] = view["KODEX200"].iloc[-1]
 if "SP500" in view:
     snap_vals["S&P 500"] = view["SP500"].iloc[-1]
+if "Bitcoin" in view:
+    snap_vals["Bitcoin"] = view["Bitcoin"].iloc[-1]
 if "FX" in view:
     snap_vals["USD/KRW"] = view["FX"].iloc[-1]
 if "Rate" in view:

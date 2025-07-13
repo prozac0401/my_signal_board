@@ -133,6 +133,7 @@ save("M2_month", m2)
 # --- 주가 지수 (Yahoo Finance) ------------------------------------------------
 sp500 = fetch_adj_close("^GSPC").rename("SP500");          save("SP500_raw", sp500)
 kodex = fetch_adj_close("069500.KS").rename("KODEX200");  save("KODEX200_raw", kodex)
+btc   = fetch_adj_close("BTC-USD", start="2014-01-01").rename("Bitcoin"); save("Bitcoin_raw", btc)
 
 # ── 2. 월→일 변환 ──────────────────────────────
 rate_d   = rate.resample("D").ffill()
@@ -141,7 +142,7 @@ m2_d     = m2.resample("D").interpolate("linear").rename("M2_D");          save(
 
 # ── 3. 통합 & 저장 ─────────────────────────────
 all_df = (
-    pd.concat([fx, gold, dxy, rate_d, m2_d, bond10_d, sp500, kodex], axis=1)
+    pd.concat([fx, gold, dxy, rate_d, m2_d, bond10_d, sp500, kodex, btc], axis=1)
       .sort_index()
       .ffill()
 )
