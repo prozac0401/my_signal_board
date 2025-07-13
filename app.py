@@ -62,37 +62,45 @@ if not DATA_FP.exists():
     st.error("❌ data/all_data.csv 파일을 찾을 수 없습니다. 경로를 확인해 주세요.")
     st.stop()
 
-# 기본 데이터 + 파생 컬럼
 
-df: pd.DataFrame = (
-    pd.read_csv(DATA_FP, index_col=0, parse_dates=True)
-    .ffill()
-    .loc["2008-01-01":]
-)
+@st.cache_data(show_spinner=False)
+def load_df(path: Path) -> pd.DataFrame:
+    """CSV 로드 및 컬럼 정리 과정을 캐시합니다."""
 
-# Gold 원화 환산 – CSV에 없을 때만 계산
-a0_cols = df.columns
-if "Gold_KRWg" not in a0_cols and {"Gold", "FX"}.issubset(a0_cols):
-    df["Gold_KRWg"] = df["Gold"] * df["FX"] / 31.1035
+    df = (
+        pd.read_csv(path, index_col=0, parse_dates=True)
+        .ffill()
+        .loc["2008-01-01":]
+    )
 
-# KODEX 200 컬럼 정규화
-for c in df.columns:
-    if c.lower().replace(" ", "").startswith("kodex200") or "069500" in c.lower():
-        df.rename(columns={c: "KODEX200"}, inplace=True)
-        break
+    # Gold 원화 환산 – CSV에 없을 때만 계산
+    a0_cols = df.columns
+    if "Gold_KRWg" not in a0_cols and {"Gold", "FX"}.issubset(a0_cols):
+        df["Gold_KRWg"] = df["Gold"] * df["FX"] / 31.1035
 
-# S&P 500 컬럼 정규화
-for c in df.columns:
-    if c.lower() in {"sp500", "^gspc"} or "sp500" in c.lower():
-        df.rename(columns={c: "SP500"}, inplace=True)
-        break
+    # KODEX 200 컬럼 정규화
+    for c in df.columns:
+        if c.lower().replace(" ", "").startswith("kodex200") or "069500" in c.lower():
+            df.rename(columns={c: "KODEX200"}, inplace=True)
+            break
 
-# M2 일별 보간
-after_cols = df.columns
-if "M2_D" not in after_cols and "M2" in after_cols:
-    df["M2_D"] = df["M2"].resample("D").interpolate("linear")
-if "M2_US_D" not in after_cols and "M2_US" in after_cols:
-    df["M2_US_D"] = df["M2_US"].resample("D").interpolate("linear")
+    # S&P 500 컬럼 정규화
+    for c in df.columns:
+        if c.lower() in {"sp500", "^gspc"} or "sp500" in c.lower():
+            df.rename(columns={c: "SP500"}, inplace=True)
+            break
+
+    # M2 일별 보간
+    after_cols = df.columns
+    if "M2_D" not in after_cols and "M2" in after_cols:
+        df["M2_D"] = df["M2"].resample("D").interpolate("linear")
+    if "M2_US_D" not in after_cols and "M2_US" in after_cols:
+        df["M2_US_D"] = df["M2_US"].resample("D").interpolate("linear")
+
+    return df
+
+
+df: pd.DataFrame = load_df(DATA_FP)
 
 # ───────────────────────────────────────────────────────────────
 # 2. 기간 슬라이더 & View DF
