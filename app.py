@@ -48,9 +48,13 @@ REL_MD = {
         "- **M2** 증가율이 높으면 주식·부동산 등 위험자산 가격이 상승하기 쉽습니다."
         "\n- **금리** 하락과 함께 **M2**가 재가속하면 위험자산 비중 확대를 고려합니다."
     ),
-    "Rate": (
-        "- 국내외 **금리** 상승은 주식·부동산에 부정적 영향을 줍니다."
-        "\n- **금리**가 **CPI**보다 낮아 실질 금리가 마이너스면 **Gold**·**BTC** 비중 확대를 검토합니다."
+    "RateKR": (
+        "- 국내 **금리** 상승은 주식·부동산에 부정적 영향을 줍니다.",
+        "\n- **금리**가 **CPI**보다 낮아 실질 금리가 마이너스면 **Gold**·**BTC** 비중 확대를 검토합니다.",
+    ),
+    "RateUS": (
+        "- 미국 **금리** 상승은 전세계 금융시장에 영향을 줍니다.",
+        "\n- **금리**가 **CPI**보다 낮아 실질 금리가 마이너스면 위험자산 선호가 높아질 수 있습니다.",
     ),
     "USDKRW": (
         "- 환율 하락(원화 강세)은 해외자산 투자 비용을 낮춰 **SP500** 비중 확대 근거가 됩니다."
@@ -288,7 +292,8 @@ TAB_KEYS = {
     "M2": "국내 M2 통화량",
     "M2US": "미국 M2 통화량",
     "USDKRW": "환율",
-    "Rate": "국내·미국 금리/10Y",
+    "RateKR": "국내 금리/10Y",
+    "RateUS": "미국 금리/10Y",
     "CPI": "CPI·근원·실질금리",
 }
 
@@ -503,11 +508,31 @@ for tab in selected_tabs:
                 line=dict(width=2, color=next(color_iter)),
             )
 
-    # Rate & Bond10 (KR/US)
-    elif tab == "Rate" and {"Rate", "Bond10", "Rate_US", "Bond10_US"}.intersection(view.columns):
-        cols = [c for c in ["Rate", "Bond10", "Rate_US", "Bond10_US"] if c in view]
+    # Korean Rate & 10Y
+    elif tab == "RateKR" and {"Rate", "Bond10"}.issubset(view.columns):
+        cols = ["Rate", "Bond10"]
         r = view[cols].copy()
-        if aux_enabled["Rate"]:
+        if aux_enabled["RateKR"]:
+            for base_col in cols:
+                m = r[base_col].resample("ME").last()
+                r[f"{base_col}_MA3M"] = m.rolling(3).mean().reindex(r.index, method="ffill")
+        for col in r.columns:
+            fig.add_scatter(
+                x=r.index,
+                y=scaler(r[col]),
+                name=col,
+                mode="lines",
+                line=dict(
+                    width=2,
+                    color=next(color_iter),
+                    dash="dot" if "MA" in col else "solid",
+                ),
+            )
+    # US Rate & 10Y
+    elif tab == "RateUS" and {"Rate_US", "Bond10_US"}.issubset(view.columns):
+        cols = ["Rate_US", "Bond10_US"]
+        r = view[cols].copy()
+        if aux_enabled["RateUS"]:
             for base_col in cols:
                 m = r[base_col].resample("ME").last()
                 r[f"{base_col}_MA3M"] = m.rolling(3).mean().reindex(r.index, method="ffill")
