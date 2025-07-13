@@ -23,3 +23,20 @@
 | 주택매매·전세가격지수  | 부동산원 R‑ONE `(월) 지역별 매매지수_아파트`                 | 주·월     |
 | 미분양주택        | 국토부 Open API `UnsoldHouseStatus`              | 월       |
 | 매수(우위)지수     | 부동산원 주간동향 HTML 크롤링                            | 주       |
+
+## 코드베이스 구조
+이 저장소는 Streamlit 대시보드와 데이터를 수집하는 스크립트로 구성되어 있습니다.
+
+- `app.py` : 메인 대시보드 애플리케이션으로 `data/all_data.csv` 파일을 불러와 지표를 시각화합니다.
+- `fetch_data.py` : FRED, ECOS, yfinance 등에서 원천 데이터를 수집하여 `data/` 폴더에 저장합니다.
+- `data/` : 수집된 CSV 파일을 보관하는 폴더로, 예시 데이터 `all_data.csv`가 포함됩니다.
+- `tests/` : 일부 유틸리티 함수의 동작을 확인하는 pytest 기반 테스트가 들어 있습니다.
+- `requirements.txt` : 실행에 필요한 파이썬 패키지 목록입니다.
+
+대시보드를 실행하려면 다음과 같이 입력합니다.
+
+```bash
+streamlit run app.py
+```
+
+데이터를 갱신하려면 `fetch_data.py`를 실행하면 됩니다.
