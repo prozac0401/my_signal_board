@@ -91,6 +91,8 @@ for c in df.columns:
 after_cols = df.columns
 if "M2_D" not in after_cols and "M2" in after_cols:
     df["M2_D"] = df["M2"].resample("D").interpolate("linear")
+if "M2_US_D" not in after_cols and "M2_US" in after_cols:
+    df["M2_US_D"] = df["M2_US"].resample("D").interpolate("linear")
 
 # ───────────────────────────────────────────────────────────────
 # 2. 기간 슬라이더 & View DF
@@ -199,6 +201,7 @@ TAB_KEYS = {
     "KODEX": "KODEX 200",
     "SP500": "S&P 500",
     "M2": "M2 통화량·YoY",
+    "M2_US": "미국 M2",
     "USDKRW": "환율",
     "Rate": "금리·10Y",
 }
@@ -314,6 +317,29 @@ for tab in selected_tabs:
                 line=dict(width=2, color=next(color_iter)),
             )
 
+    # US M2
+    elif tab == "M2_US" and "M2_US_D" in view:
+        m = view["M2_US_D"].resample("M").last().to_frame("M2_US_M")
+        if aux_enabled["M2_US"]:
+            m["MA6"] = m.M2_US_M.rolling(6).mean()
+            m["MA12"] = m.M2_US_M.rolling(12).mean()
+            yoy = (m.M2_US_M.pct_change(12) * 100).rename("YoY%")
+            fig.add_bar(
+                x=yoy.index,
+                y=scaler(yoy),
+                name="US M2 YoY% (bar)",
+                opacity=0.45,
+                marker_color=next(color_iter),
+            )
+        for col in m.columns:
+            fig.add_scatter(
+                x=m.index,
+                y=scaler(m[col]),
+                name=f"{col}",
+                mode="lines",
+                line=dict(width=2, color=next(color_iter)),
+            )
+
     # USDKRW
     elif tab == "USDKRW" and "FX" in view:
         fx = view[["FX"]]
@@ -386,6 +412,8 @@ if "Bond10" in view:
     snap_vals["10Y (%)"] = view["Bond10"].iloc[-1]
 if "M2_D" in view:
     snap_vals["M2 월말"] = view["M2_D"].resample("M").last().iloc[-1]
+if "M2_US_D" in view:
+    snap_vals["미국 M2 월말"] = view["M2_US_D"].resample("M").last().iloc[-1]
 
 st.markdown("### 최근 값 Snapshot")
 cols = st.columns(len(snap_vals))

@@ -16,6 +16,7 @@
 | CPI·근원물가     | 통계청 KOSIS `902Y001`                           | 월       |
 | 실질금리         | 금리‑CPI 연산(Pandas)                             | 월       |
 | M2 통화량       | ECOS `060Y002`                                | 월       |
+| 미국 M2          | FRED `M2SL`                                   | 월       |
 | USD/KRW      | ECOS `731Y001` or Investing.com CSV           | 일       |
 | KODEX 200 가격 | Investing.com `069500` CSV                    | 일       |
 | KRX 금 현물     | KRX 정보데이터시스템 `MDCMGZN001`                     | 일       |
