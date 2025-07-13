@@ -67,11 +67,7 @@ if not DATA_FP.exists():
 def load_df(path: Path) -> pd.DataFrame:
     """CSV 로드 및 컬럼 정리 과정을 캐시합니다."""
 
-    df = (
-        pd.read_csv(path, index_col=0, parse_dates=True)
-        .ffill()
-        .loc["2008-01-01":]
-    )
+    df = pd.read_csv(path, index_col=0, parse_dates=True).ffill().loc["2008-01-01":]
 
     # Gold 원화 환산 – CSV에 없을 때만 계산
     a0_cols = df.columns
@@ -97,6 +93,34 @@ def load_df(path: Path) -> pd.DataFrame:
     if "M2_US_D" not in after_cols and "M2_US" in after_cols:
         df["M2_US_D"] = df["M2_US"].resample("D").interpolate("linear")
 
+    # CPI 및 Core CPI 컬럼 정규화
+    for c in list(df.columns):
+        uc = c.upper()
+        if uc.startswith("CPIAUCSL"):
+            df.rename(
+                columns={c: "CPI" if not uc.endswith("_D") else "CPI_D"}, inplace=True
+            )
+        elif uc.startswith("CPILFESL"):
+            df.rename(
+                columns={c: "CoreCPI" if not uc.endswith("_D") else "CoreCPI_D"},
+                inplace=True,
+            )
+
+    # CPI 일별 보간
+    after_cols = df.columns
+    if "CPI_D" not in after_cols and "CPI" in after_cols:
+        df["CPI_D"] = df["CPI"].resample("D").ffill()
+    if "CoreCPI_D" not in after_cols and "CoreCPI" in after_cols:
+        df["CoreCPI_D"] = df["CoreCPI"].resample("D").ffill()
+
+    # Real Rate 계산 (정책금리 - CPI YoY)
+    if "RealRate_D" not in after_cols and {"Rate", "CPI_D"}.issubset(after_cols):
+        cpi_yoy = df["CPI_D"].resample("ME").last().pct_change(12) * 100
+        rr = (df["Rate"].resample("ME").last() - cpi_yoy).reindex(
+            df.index, method="ffill"
+        )
+        df["RealRate_D"] = rr
+
     return df
 
 
@@ -113,7 +137,9 @@ with st.sidebar:
     mid_date = df.index.max().date() - relativedelta(years=3)
 
     d0, d1, d2 = start_date, end_date, mid_date
-    _date = st.slider("기간", d0, d1, (d2, d1), format="YYYY-MM-DD", key="date_slider_3y")
+    _date = st.slider(
+        "기간", d0, d1, (d2, d1), format="YYYY-MM-DD", key="date_slider_3y"
+    )
     d_from, d_to = _date
 
 view = df.loc[pd.to_datetime(d_from) : pd.to_datetime(d_to)].copy()
@@ -127,11 +153,13 @@ sig_dt = view.index[-1].strftime("%Y-%m-%d")
 # 3. Trend·Macro 점수
 # ----------------------------------------------------------------
 
+
 def trend_score(series, short: int = 20, long: int = 50):
     ma_s, ma_l = series.rolling(short).mean(), series.rolling(long).mean()
     cross = np.sign(ma_s - ma_l)
     mom_1m = np.sign(series.pct_change(21))
     return (cross + mom_1m).clip(-2, 2)
+
 
 trend = {}
 if "Gold_KRWg" in view:
@@ -182,15 +210,22 @@ macro = macro.clip(-3, 3)
 # ───────────────────────────────────────────────────────────────
 # 4. 색상·유틸 및 월별 세로선 함수
 # ----------------------------------------------------------------
-COLORS = px.colors.qualitative.Plotly + px.colors.qualitative.Set2 + px.colors.qualitative.Set3
+COLORS = (
+    px.colors.qualitative.Plotly
+    + px.colors.qualitative.Set2
+    + px.colors.qualitative.Set3
+)
 SIG_COL_LINE = {2: "#16a085", 1: "#2ecc71", -1: "#f39c12", -2: "#e74c3c"}
 
 # Signal 라인을 완전히 비활성화 (빈 리스트 반환)
 
+
 def vlines(*args, **kwargs):
     return []
 
+
 # 매월 1일에 얇은 세로선 추가 – 한 번만 실행
+
 
 def add_monthly_guides(fig: go.Figure, start: pd.Timestamp, end: pd.Timestamp):
     """주어진 구간의 매월 1일에 세로선을 한 번씩 추가합니다."""
@@ -206,6 +241,7 @@ def add_monthly_guides(fig: go.Figure, start: pd.Timestamp, end: pd.Timestamp):
             opacity=0.3,
             layer="below",
         )
+
 
 # ───────────────────────────────────────────────────────────────
 # 5. Sidebar – 탭 토글 & 스케일 모드 + 보조 지표 토글
@@ -248,21 +284,25 @@ AUX_DEFAULTS = {k: False for k in TAB_KEYS}
 
 aux_enabled = {}
 for k in selected_tabs:
-    aux_enabled[k] = st.sidebar.toggle(f"{TAB_KEYS[k]} 보조 지표", value=AUX_DEFAULTS[k], key=f"aux_{k}")
+    aux_enabled[k] = st.sidebar.toggle(
+        f"{TAB_KEYS[k]} 보조 지표", value=AUX_DEFAULTS[k], key=f"aux_{k}"
+    )
 
 # ───────────────────────────────────────────────────────────────
 # 6. 스케일 함수
 # ----------------------------------------------------------------
 
+
 def scaler(series: pd.Series):
     if scale_mode.startswith("표준화"):
         rng = series.max() - series.min()
-        
+
         if rng != 0:
             return (series - series.min()) / rng
         return pd.Series(0, index=series.index)
-      
+
     return series
+
 
 # ───────────────────────────────────────────────────────────────
 # 7. Figure – 선택 탭 Trace 합성
@@ -458,7 +498,11 @@ for tab in selected_tabs:
                 y=scaler(r[col]),
                 name=col,
                 mode="lines",
-                line=dict(width=2, color=next(color_iter), dash="dot" if "MA" in col else "solid"),
+                line=dict(
+                    width=2,
+                    color=next(color_iter),
+                    dash="dot" if "MA" in col else "solid",
+                ),
             )
 
 # 월별 세로 가이드라인 추가
@@ -547,8 +591,10 @@ with st.expander("🔔 통합 자산 시그널", expanded=False):
         final_scores[asset] = int((ts + macro).clip(-3, 3).iloc[-1])
 
     if "RTMS" in view:
-        realty_trend = view["RTMS"].pct_change(3).apply(
-            lambda x: 2 if x > 0.03 else 1 if x > 0 else -1 if x > -0.03 else -2
+        realty_trend = (
+            view["RTMS"]
+            .pct_change(3)
+            .apply(lambda x: 2 if x > 0.03 else 1 if x > 0 else -1 if x > -0.03 else -2)
         )
         final_scores["Realty"] = int((realty_trend + macro).clip(-3, 3).iloc[-1])
 
@@ -566,4 +612,6 @@ with st.expander("🔔 통합 자산 시그널", expanded=False):
     else:
         st.info("시그널을 계산할 데이터가 부족합니다.")
 
-st.caption("Data: FRED · Stooq · ECOS · Yahoo Finance — Signals = Macro(M2 + Spread) × Trend")
+st.caption(
+    "Data: FRED · Stooq · ECOS · Yahoo Finance — Signals = Macro(M2 + Spread) × Trend"
+)
