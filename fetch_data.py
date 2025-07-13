@@ -307,36 +307,35 @@ spread5d = (bond10_d - rate_d).rolling(5).mean().rename("Spread5D")
 save("Spread5D", spread5d)
 
 # ── 3. 통합 & 저장 ─────────────────────────────
-all_df = (
-    pd.concat(
-        [
-            fx,
-            gold,
-            gold_krwg,
-            dxy,
-            rate_d,
-            bond10_d,
-            us_rate_d,
-            us_bond10_d,
-            spread5d,
-            m2_d,
-            m2_us_d,
-            cpi_d,
-            core_cpi_d,
-            real_rate_d,
-            idx_sale_d,
-            idx_rent_d,
-            unsold_d,
-            buy_idx_d,
-            sp500,
-            kodex,
-            btc,
-        ],
-        axis=1,
-    )
-      .sort_index()
-      .ffill()
-)
+series_list = [
+    fx,
+    gold,
+    gold_krwg,
+    dxy,
+    rate_d,
+    bond10_d,
+    us_rate_d,
+    us_bond10_d,
+    spread5d,
+    m2_d,
+    m2_us_d,
+    cpi_d,
+    core_cpi_d,
+    real_rate_d,
+]
+
+if not idx_sale_d.empty:
+    series_list.append(idx_sale_d)
+if not idx_rent_d.empty:
+    series_list.append(idx_rent_d)
+if not unsold_d.empty:
+    series_list.append(unsold_d)
+if not buy_idx_d.empty:
+    series_list.append(buy_idx_d)
+
+series_list.extend([sp500, kodex, btc])
+
+all_df = pd.concat(series_list, axis=1).sort_index().ffill()
 
 save("all_data", all_df)
 print(all_df.tail())
