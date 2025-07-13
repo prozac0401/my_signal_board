@@ -513,9 +513,10 @@ add_monthly_guides(fig, view.index.min(), view.index.max())
 # ───────────────────────────────────────────────────────────────
 # 8. Figure Layout
 # ----------------------------------------------------------------
-# 원본 값일 때는 금액(원) 또는 비율(%) 단위를 함께 표시한다. 기존 문자열이 잘려
-# 있어 보기 불편하므로 완전한 문구로 수정한다.
-y_title = "Value (원/%)" if scale_mode.startswith("원본") else "표준화 값 (0–1)"
+# 원본 값일 때는 금액(원), 지수 또는 비율(%) 등 여러 단위를 포괄적으로 표시한다.
+y_title = (
+    "Value (원·지수/%)" if scale_mode.startswith("원본") else "표준화 값 (0–1)"
+)
 fig.update_layout(
     height=640,
     title=f"선택한 탭 Overlay – {scale_mode}",
@@ -570,8 +571,8 @@ snap_units = {
     "10Y (%)": "%",
     "M2 월말": "₩",
     "미국 M2 월말": "$",
-    "CPI": "%",
-    "Core CPI": "%",
+    "CPI": "",
+    "Core CPI": "",
     "Real Rate": "%",
 }
 
