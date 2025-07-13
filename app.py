@@ -140,7 +140,7 @@ if "FX" in view:
 # Macro score (M2 YoY + 금리 스프레드)
 macro = pd.Series(0, index=view.index)
 if "M2_D" in view:
-    month = view["M2_D"].resample("M").last()
+    month = view["M2_D"].resample("ME").last()
     m2_yoy = (month.pct_change(12) * 100).rename("M2_YoY")
 
     def m2_cls(x):
@@ -318,7 +318,7 @@ for tab in selected_tabs:
 
     # M2
     elif tab == "M2" and "M2_D" in view:
-        m = view["M2_D"].resample("M").last().to_frame("M2_M")
+        m = view["M2_D"].resample("ME").last().to_frame("M2_M")
         if aux_enabled["M2"]:
             m["MA6"] = m.M2_M.rolling(6).mean()
             m["MA12"] = m.M2_M.rolling(12).mean()
@@ -341,7 +341,7 @@ for tab in selected_tabs:
 
     # M2US
     elif tab == "M2US" and "M2_US_D" in view:
-        m = view["M2_US_D"].resample("M").last().to_frame("M2US_M")
+        m = view["M2_US_D"].resample("ME").last().to_frame("M2US_M")
         if aux_enabled["M2US"]:
             m["MA6"] = m.M2US_M.rolling(6).mean()
             m["MA12"] = m.M2US_M.rolling(12).mean()
@@ -381,8 +381,8 @@ for tab in selected_tabs:
     elif tab == "Rate" and {"Rate", "Bond10"}.issubset(view.columns):
         r = view[["Rate", "Bond10"]].copy()
         if aux_enabled["Rate"]:
-            rate_m = r["Rate"].resample("M").last()
-            bond_m = r["Bond10"].resample("M").last()
+            rate_m = r["Rate"].resample("ME").last()
+            bond_m = r["Bond10"].resample("ME").last()
             r["Rate_MA3M"] = rate_m.rolling(3).mean().reindex(r.index, method="ffill")
             r["Bond10_MA3M"] = bond_m.rolling(3).mean().reindex(r.index, method="ffill")
         for col in r.columns:
@@ -435,9 +435,9 @@ if "Rate" in view:
 if "Bond10" in view:
     snap_vals["10Y (%)"] = view["Bond10"].iloc[-1]
 if "M2_D" in view:
-    snap_vals["M2 월말"] = view["M2_D"].resample("M").last().iloc[-1]
+    snap_vals["M2 월말"] = view["M2_D"].resample("ME").last().iloc[-1]
 if "M2_US_D" in view:
-    snap_vals["미국 M2 월말"] = view["M2_US_D"].resample("M").last().iloc[-1]
+    snap_vals["미국 M2 월말"] = view["M2_US_D"].resample("ME").last().iloc[-1]
 
 st.markdown("### 최근 값 Snapshot")
 cols = st.columns(len(snap_vals))
