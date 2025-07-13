@@ -31,24 +31,74 @@ HELP_MD = """
 3. 기본 스케일은 `표준화` 입니다. 값 범위가 크게 다른 지표끼리 겹쳐도 직선으로 눌리지 않아요.
 """
 
-REL_MD = {
-    "M2": "- M2 증가율이 높으면 주식·부동산 등 위험자산 가격이 상승하기 쉽습니다.\n- 금리 하락과 동시에 M2가 늘어나면 경기 부양 신호로 해석됩니다.",
-    "Rate": "- 금리 상승은 대체로 주식·부동산에 부정적 영향을 줍니다.\n- 금리가 CPI보다 낮으면 실질 금리가 마이너스로 금과 비트코인 선호가 높아집니다.",
-    "USDKRW": "- 환율 하락(원화 강세)은 해외자산 투자 비용을 낮춥니다.\n- 환율 상승과 금 가격 상승이 동시에 나타나면 위험 회피 심리가 강합니다.",
-    "CPI": "- 물가가 빠르게 오르면 중앙은행은 금리 인상을 검토하게 됩니다.\n- CPI 안정 + M2 증가 조합은 경기 회복 신호로 볼 수 있습니다.",
-    "KODEX": "- 국내 주식 지수로, M2 증가와 금리 하락 시 상승 가능성이 높습니다.",
-    "SP500": "- 미국 M2 증가와 실질 금리 하락이 함께할 때 강세를 보이는 경향이 있습니다.",
-    "Gold": "- 실질 금리가 0 이하일 때 금 수요가 커집니다.\n- 달러 약세와 함께 금 가격이 오르면 위험 회피 심리를 나타냅니다.",
-    "BTC": "- 유동성이 풍부하고 실질 금리가 낮을 때 강세가 나타납니다.\n- 위험 회피 국면에서는 변동성이 커지므로 주의가 필요합니다.",
-    "M2US": "- 미국 M2가 빠르게 증가하면 S&P 500 등 미국 자산에 우호적인 환경이 만들어집니다.",
-    "RealRate": "- 실질 금리가 플러스일 때 안전자산 매력은 감소합니다.\n- 실질 금리 마이너스 구간은 금과 비트코인 선호가 높아집니다.",
-    "CoreCPI": "- 근원 CPI가 상승세면 금리 인상 가능성이 높아집니다.",
-}
+REL_TREE_HTML = """
+<style>
+.tree summary {cursor:pointer;font-weight:600;}
+.tree ul {list-style:disc;margin:0 0 0 1.2em;padding:0;}
+</style>
+<div class="tree">
+<details>
+<summary>M2</summary>
+<ul>
+<li>M2 증가율이 높으면 주식·부동산 등 위험자산 가격이 상승하기 쉽습니다.</li>
+<li>금리 하락과 동시에 M2가 늘어나면 경기 부양 신호로 해석됩니다.</li>
+</ul>
+</details>
+<details>
+<summary>금리 (Rate)</summary>
+<ul>
+<li>금리 상승은 대체로 주식·부동산에 부정적 영향을 줍니다.</li>
+<li>금리가 CPI보다 낮으면 실질 금리가 마이너스로 금과 비트코인 선호가 높아집니다.</li>
+</ul>
+</details>
+<details>
+<summary>USD/KRW</summary>
+<ul>
+<li>환율 하락(원화 강세)은 해외자산 투자 비용을 낮춥니다.</li>
+<li>환율 상승과 금 가격 상승이 동시에 나타나면 위험 회피 심리가 강합니다.</li>
+</ul>
+</details>
+<details>
+<summary>CPI</summary>
+<ul>
+<li>물가가 빠르게 오르면 중앙은행은 금리 인상을 검토하게 됩니다.</li>
+<li>CPI 안정 + M2 증가 조합은 경기 회복 신호로 볼 수 있습니다.</li>
+</ul>
+</details>
+<details>
+<summary>KODEX 200</summary>
+<ul>
+<li>국내 주식 지수로, M2 증가와 금리 하락 시 상승 가능성이 높습니다.</li>
+</ul>
+</details>
+<details>
+<summary>S&P 500</summary>
+<ul>
+<li>미국 M2 증가와 실질 금리 하락이 함께할 때 강세를 보이는 경향이 있습니다.</li>
+</ul>
+</details>
+<details>
+<summary>Gold</summary>
+<ul>
+<li>실질 금리가 0 이하일 때 금 수요가 커집니다.</li>
+<li>달러 약세와 함께 금 가격이 오르면 위험 회피 심리를 나타냅니다.</li>
+</ul>
+</details>
+<details>
+<summary>Bitcoin</summary>
+<ul>
+<li>유동성이 풍부하고 실질 금리가 낮을 때 강세가 나타납니다.</li>
+<li>위험 회피 국면에서는 변동성이 커지므로 주의가 필요합니다.</li>
+</ul>
+</details>
+</div>
+"""
 
 with st.sidebar.expander("ℹ️ 도움말 · Help", expanded=False):
     st.markdown(HELP_MD)
 
-
+with st.sidebar.popover("📊 지표 상관관계"):  # Popup button replacing M2 YoY help
+    st.components.v1.html(REL_TREE_HTML, height=400, scrolling=True)
 
 # ───────────────────────────────────────────────────────────────
 # 1. 데이터 로드
@@ -258,15 +308,9 @@ TAB_KEYS = {
 
 st.sidebar.markdown("### 🔀 탭 On / Off")
 selected_tabs = []
-for key, label in TAB_KEYS.items():
+for i, (key, label) in enumerate(TAB_KEYS.items()):
     default_on = key in {"Gold", "KODEX"}
-    col_t, col_p = st.sidebar.columns([6, 1])
-    with col_t:
-        val = st.toggle(label, value=default_on, key=f"tab_{key}")
-    with col_p:
-        with st.popover("❔", key=f"pop_{key}"):
-            st.markdown(REL_MD.get(key, ""))
-    if val:
+    if st.sidebar.toggle(label, value=default_on, key=f"tab_{key}"):
         selected_tabs.append(key)
 
 if not selected_tabs:
