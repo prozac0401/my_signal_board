@@ -255,9 +255,7 @@ TAB_KEYS = {
     "M2US": "미국 M2 통화량·YoY",
     "USDKRW": "환율",
     "Rate": "금리·10Y",
-    "CPI": "CPI",
-    "CoreCPI": "근원 CPI",
-    "RealRate": "실질 금리",
+    "CPI": "CPI·실질금리",
 }
 
 st.sidebar.markdown("### 🔀 탭 On / Off")
@@ -432,11 +430,20 @@ for tab in selected_tabs:
                 line=dict(width=2, color=next(color_iter)),
             )
 
-    # CPI
-    elif tab == "CPI" and "CPI_D" in view:
-        c = view["CPI_D"].resample("ME").last().to_frame("CPI")
-        if aux_enabled.get("CPI"):
-            yoy = (c.CPI.pct_change(12) * 100).rename("YoY%")
+    # CPI · Core CPI · Real Rate 한꺼번에 표시
+    elif tab == "CPI" and {"CPI_D", "CoreCPI_D", "RealRate_D"}.intersection(view.columns):
+        inf = {}
+        if "CPI_D" in view:
+            inf["CPI"] = view["CPI_D"].resample("ME").last()
+        if "CoreCPI_D" in view:
+            inf["Core CPI"] = view["CoreCPI_D"].resample("ME").last()
+        if "RealRate_D" in view:
+            inf["Real Rate"] = view["RealRate_D"].resample("ME").last()
+
+        df_inf = pd.DataFrame(inf)
+
+        if aux_enabled.get("CPI") and "CPI" in df_inf:
+            yoy = (df_inf["CPI"].pct_change(12) * 100).rename("YoY%")
             fig.add_bar(
                 x=yoy.index,
                 y=scaler(yoy),
@@ -444,42 +451,12 @@ for tab in selected_tabs:
                 opacity=0.45,
                 marker_color=next(color_iter),
             )
-        fig.add_scatter(
-            x=c.index,
-            y=scaler(c["CPI"]),
-            name="CPI",
-            mode="lines",
-            line=dict(width=2, color=next(color_iter)),
-        )
 
-    # Core CPI
-    elif tab == "CoreCPI" and "CoreCPI_D" in view:
-        c = view["CoreCPI_D"].resample("ME").last().to_frame("CoreCPI")
-        if aux_enabled.get("CoreCPI"):
-            yoy = (c.CoreCPI.pct_change(12) * 100).rename("YoY%")
-            fig.add_bar(
-                x=yoy.index,
-                y=scaler(yoy),
-                name="Core CPI YoY% (bar)",
-                opacity=0.45,
-                marker_color=next(color_iter),
-            )
-        fig.add_scatter(
-            x=c.index,
-            y=scaler(c["CoreCPI"]),
-            name="Core CPI",
-            mode="lines",
-            line=dict(width=2, color=next(color_iter)),
-        )
-
-    # Real Rate
-    elif tab == "RealRate" and "RealRate_D" in view:
-        r = view["RealRate_D"].resample("ME").last().to_frame("RealRate")
-        for col in r.columns:
+        for col in df_inf.columns:
             fig.add_scatter(
-                x=r.index,
-                y=scaler(r[col]),
-                name="Real Rate",
+                x=df_inf.index,
+                y=scaler(df_inf[col]),
+                name=col,
                 mode="lines",
                 line=dict(width=2, color=next(color_iter)),
             )
@@ -513,7 +490,7 @@ add_monthly_guides(fig, view.index.min(), view.index.max())
 # ----------------------------------------------------------------
 # 원본 값일 때는 금액(원) 또는 비율(%) 단위를 함께 표시한다. 기존 문자열이 잘려
 # 있어 보기 불편하므로 완전한 문구로 수정한다.
-y_title = "Value (원/%)" if scale_mode.startswith("원본") else "표준화 값 (0–1)"
+y_title = "값 (지수·₩·%)" if scale_mode.startswith("원본") else "표준화 값 (0–1)"
 fig.update_layout(
     height=640,
     title=f"선택한 탭 Overlay – {scale_mode}",

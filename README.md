@@ -12,12 +12,12 @@
 
 | 지표 | API 경로 | 업데이트 주기 | 상태 |
 | ---- | -------- | ------------- | ---- |
-| 정책금리·국채금리 | 한국은행 ECOS `StatisticSearch` (722Y001,121Y005) | 월/일 | (완료) |
+| 정책금리·국채금리 | FRED `INTDSRKRM193N`·`IRLTLT01KRM156N` | 월/일 | (완료) |
 | CPI·근원물가 | FRED `CPIAUCSL`·`CPILFESL` | 월 | (완료) |
 | 실질금리 | 금리-CPI 연산(Pandas) | 월 | (완료) |
-| M2 통화량 | ECOS `060Y002` | 월 | (완료) |
-| USD/KRW | ECOS `731Y001` 또는 Investing.com CSV | 일 | (완료) |
-| KODEX 200 가격 | Investing.com `069500` CSV | 일 | (완료) |
+| M2 통화량 | ECOS `101Y003`→`060Y002`→`LDT_MA001_A` | 월 | (완료) |
+| USD/KRW | FRED `DEXKOUS` | 일 | (완료) |
+| KODEX 200 가격 | Yahoo Finance `069500.KS` | 일 | (완료) |
 | 비트코인 가격 | Yahoo Finance `BTC-USD` | 일 | (완료) |
 | KRX 금 현물 | KRX 정보데이터시스템 `MDCMGZN001` | 일 | (예정) |
 | 주택매매·전세가격지수 | 부동산원 R-ONE `(월) 지역별 매매지수_아파트` | 주·월 | (예정) |
