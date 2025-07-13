@@ -20,6 +20,18 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+st.markdown(
+    """
+    <style>
+    div[data-testid="stSidebar"] div[data-testid="stPopover"] button {
+        padding: 0.1rem 0.3rem;
+        font-size: 0;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 # ───────────────────────────────────────────────────────────────
 # 0. 사이드바 – 도움말 / 옵션
 # ----------------------------------------------------------------
@@ -264,9 +276,7 @@ for key, label in TAB_KEYS.items():
     with col_t:
         val = st.toggle(label, value=default_on, key=f"tab_{key}")
     with col_p:
-        # st.popover does not accept a key argument in recent Streamlit
-        # versions, so we omit it to avoid a TypeError.
-        with st.popover("❔"):
+        with st.popover(" "):
             st.markdown(REL_MD.get(key, ""))
     if val:
         selected_tabs.append(key)
