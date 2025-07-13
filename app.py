@@ -606,24 +606,24 @@ if "RealRate_D" in view:
 st.markdown("### 최근 값 Snapshot")
 
 snap_units = {
-    "Gold (원/g)": "₩",
-    "KODEX 200": "₩",
-    "S&P 500": "$",
-    "Bitcoin": "$",
-    "USD/KRW": "₩",
-    "기준금리 (%)": "%",
-    "10Y (%)": "%",
-    "연준금리 (%)": "%",
-    "미국10Y (%)": "%",
+    "Gold (원/g)": " ₩",
+    "KODEX 200": " ₩",
+    "S&P 500": " $",
+    "Bitcoin": " $",
+    "USD/KRW": " ₩",
+    "기준금리 (%)": " %",
+    "10Y (%)": " %",
+    "연준금리 (%)": " %",
+    "미국10Y (%)": " %",
     "국내 M2 월말": "B",
     "미국 M2 월말": "B $",
     "CPI": "",
-    "Real Rate": "%",
+    "Real Rate": " %",
 }
 
 def _fmt(val: float, unit: str) -> str:
     u = unit.strip()
-    if u.startswith("₩"):
+    if u.endswith("₩"):
         decimals = 0 if u == "₩" else 2
         return f"{val:,.{decimals}f}{unit}"
     return f"{val:,.2f}{unit}"
