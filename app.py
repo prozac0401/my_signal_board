@@ -441,13 +441,26 @@ if "M2_US_D" in view:
 
 st.markdown("### 최근 값 Snapshot")
 
-for label, val in snap_vals.items():
-    st.markdown(
-        f"<div style='font-size:18px;font-weight:600;'>{label}</div>"
-        f"<div style='font-size:26px;font-weight:700;margin-bottom:12px;'>"
-        f"{val:,.2f}</div>",
-        unsafe_allow_html=True,
-    )
+snap_units = {
+    "Gold (원/g)": "₩",
+    "KODEX 200": "₩",
+    "S&P 500": "$",
+    "Bitcoin": "$",
+    "USD/KRW": "₩",
+    "기준금리 (%)": "%",
+    "10Y (%)": "%",
+    "M2 월말": "₩",
+    "미국 M2 월말": "$",
+}
+
+snap_tbl = pd.DataFrame(
+    [
+        {"항목": label, "값": f"{val:,.2f}{snap_units.get(label, '')}"}
+        for label, val in snap_vals.items()
+    ]
+)
+
+st.table(snap_tbl)
 
 # ───────────────────────────────────────────────────────────────
 # 10. Signal 카드 (기존 로직 유지)
