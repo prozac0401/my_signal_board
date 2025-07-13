@@ -264,7 +264,9 @@ for key, label in TAB_KEYS.items():
     with col_t:
         val = st.toggle(label, value=default_on, key=f"tab_{key}")
     with col_p:
-        with st.popover("❔", key=f"pop_{key}"):
+        # st.popover does not accept a key argument in recent Streamlit
+        # versions, so we omit it to avoid a TypeError.
+        with st.popover("❔"):
             st.markdown(REL_MD.get(key, ""))
     if val:
         selected_tabs.append(key)
