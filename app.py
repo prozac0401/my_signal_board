@@ -440,9 +440,14 @@ if "M2_US_D" in view:
     snap_vals["미국 M2 월말"] = view["M2_US_D"].resample("M").last().iloc[-1]
 
 st.markdown("### 최근 값 Snapshot")
-cols = st.columns(len(snap_vals))
-for (label, val), col in zip(snap_vals.items(), cols):
-    col.metric(label, f"{val:,.2f}")
+
+for label, val in snap_vals.items():
+    st.markdown(
+        f"<div style='font-size:18px;font-weight:600;'>{label}</div>"
+        f"<div style='font-size:26px;font-weight:700;margin-bottom:12px;'>"
+        f"{val:,.2f}</div>",
+        unsafe_allow_html=True,
+    )
 
 # ───────────────────────────────────────────────────────────────
 # 10. Signal 카드 (기존 로직 유지)
