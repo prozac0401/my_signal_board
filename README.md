@@ -10,20 +10,19 @@
 
 추가할 것들.
 
-| 지표           | API · 경로                                      | 업데이트 주기 |
-| ------------ | --------------------------------------------- | ------- |
-| 정책금리·국채금리    | 한국은행 ECOS `StatisticSearch` (722Y001,121Y005) | 월/일     |
-| CPI·근원물가     | 통계청 KOSIS `902Y001`                           | 월       |
-| 실질금리         | 금리‑CPI 연산(Pandas)                             | 월       |
-| M2 통화량       | ECOS `060Y002`                                | 월       |
-| USD/KRW      | ECOS `731Y001` or Investing.com CSV           | 일       |
-| KODEX 200 가격 | Investing.com `069500` CSV                    | 일       |
-| 비트코인 가격   | Yahoo Finance `BTC-USD`                      | 일       |
-| KRX 금 현물     | KRX 정보데이터시스템 `MDCMGZN001`                     | 일       |
-| 주택매매·전세가격지수  | 부동산원 R‑ONE `(월) 지역별 매매지수_아파트`                 | 주·월     |
-| 미분양주택        | 국토부 Open API `UnsoldHouseStatus`              | 월       |
-| 매수(우위)지수     | 부동산원 주간동향 HTML 크롤링                            | 주       |
-
+| 지표 | API 경로 | 업데이트 주기 | 상태 |
+| ---- | -------- | ------------- | ---- |
+| 정책금리·국채금리 | 한국은행 ECOS `StatisticSearch` (722Y001,121Y005) | 월/일 | (완료) |
+| CPI·근원물가 | 통계청 KOSIS `902Y001` | 월 | (예정) |
+| 실질금리 | 금리-CPI 연산(Pandas) | 월 | (예정) |
+| M2 통화량 | ECOS `060Y002` | 월 | (완료) |
+| USD/KRW | ECOS `731Y001` 또는 Investing.com CSV | 일 | (완료) |
+| KODEX 200 가격 | Investing.com `069500` CSV | 일 | (완료) |
+| 비트코인 가격 | Yahoo Finance `BTC-USD` | 일 | (완료) |
+| KRX 금 현물 | KRX 정보데이터시스템 `MDCMGZN001` | 일 | (예정) |
+| 주택매매·전세가격지수 | 부동산원 R-ONE `(월) 지역별 매매지수_아파트` | 주·월 | (예정) |
+| 미분양주택 | 국토부 Open API `UnsoldHouseStatus` | 월 | (예정) |
+| 매수(우위)지수 | 부동산원 주간동향 HTML 크롤링 | 주 | (예정) |
 ## 코드베이스 구조
 이 저장소는 Streamlit 대시보드와 데이터를 수집하는 스크립트로 구성되어 있습니다.
 

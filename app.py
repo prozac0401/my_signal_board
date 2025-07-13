@@ -70,9 +70,9 @@ df: pd.DataFrame = (
     .loc["2008-01-01":]
 )
 
-# Gold 원화 환산
+# Gold 원화 환산 – CSV에 없을 때만 계산
 a0_cols = df.columns
-if {"Gold", "FX"}.issubset(a0_cols):
+if "Gold_KRWg" not in a0_cols and {"Gold", "FX"}.issubset(a0_cols):
     df["Gold_KRWg"] = df["Gold"] * df["FX"] / 31.1035
 
 # KODEX 200 컬럼 정규화
@@ -160,7 +160,11 @@ if "M2_D" in view:
 else:
     s_m2 = pd.Series(dtype=float)
 
-if {"Rate", "Bond10"}.issubset(view.columns):
+if "Spread5D" in view.columns:
+    spread = view["Spread5D"]
+    spread_score = spread.apply(lambda x: 1 if x > 0.5 else -1 if x < 0 else 0)
+    macro = macro.add(spread_score, fill_value=0)
+elif {"Rate", "Bond10"}.issubset(view.columns):
     spread = (view["Bond10"] - view["Rate"]).rolling(5).mean()
     spread_score = spread.apply(lambda x: 1 if x > 0.5 else -1 if x < 0 else 0)
     macro = macro.add(spread_score, fill_value=0)

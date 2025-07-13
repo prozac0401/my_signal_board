@@ -115,6 +115,10 @@ gold = pd.read_csv(
 gold = gold[gold.Close != "-"][["Date", "Close"]].set_index("Date").astype(float).squeeze()
 gold.index = pd.to_datetime(gold.index);    gold.name = "Gold";     save("Gold_raw", gold)
 
+# Gold 원화 환산 (원/그램)
+gold_krwg = (gold * fx / 31.1035).rename("Gold_KRWg")
+save("Gold_KRWg", gold_krwg)
+
 dxy  = fred("DTWEXM");                      dxy.name = "DXY";       save("DXY_raw", dxy)
 
 # --- 기준금리 & 국채 10Y (FRED) ------------------------------------------------
@@ -146,9 +150,29 @@ bond10_d = bond10.resample("D").ffill()
 m2_d     = m2.resample("D").interpolate("linear").rename("M2_D");          save("M2_daily", m2_d)
 m2_us_d  = m2_us.resample("D").interpolate("linear").rename("M2_US_D");      save("M2_US_daily", m2_us_d)
 
+# 금리 스프레드(10Y - 정책금리) 5일 평균
+spread5d = (bond10_d - rate_d).rolling(5).mean().rename("Spread5D")
+save("Spread5D", spread5d)
+
 # ── 3. 통합 & 저장 ─────────────────────────────
 all_df = (
-    pd.concat([fx, gold, dxy, rate_d, m2_d, m2_us_d, bond10_d, sp500, kodex, btc], axis=1)
+    pd.concat(
+        [
+            fx,
+            gold,
+            gold_krwg,
+            dxy,
+            rate_d,
+            bond10_d,
+            spread5d,
+            m2_d,
+            m2_us_d,
+            sp500,
+            kodex,
+            btc,
+        ],
+        axis=1,
+    )
       .sort_index()
       .ffill()
 )
