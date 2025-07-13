@@ -9,6 +9,7 @@ fetch_data.py  –  거시·자산 원천 데이터 수집 (v4)
 ✓ Rate     : 한국은행 기준금리 (FRED INTDSRKRM193N, 월 → 일 ffill)
 ✓ Bond10   : 국채 10년 수익률 (FRED IRLTLT01KRM156N, 월 → 일 ffill)
 ✓ M2       : 통화량(월) 101Y003 ▷ 060Y002 ▷ LDT_MA001_A → 일 선형보간(M2_D)
+✓ M2_US    : 미국 M2 Money Stock (FRED M2SL, 월 → 일 선형보간)
 ✓ SP500    : S&P 500 (^GSPC, 일)
 ✓ KODEX200 : 069500.KS (일)
 결과 → data/all_data.csv  (일 빈도, ffill)
@@ -120,6 +121,10 @@ dxy  = fred("DTWEXM");                      dxy.name = "DXY";       save("DXY_ra
 rate   = fred(RATE_FRED_ID, freq="m", start="1964-01-01").rename("Rate");      save("Rate_month", rate)
 bond10 = fred(BOND10_FRED_ID, freq="m", start="2000-01-01").rename("Bond10");  save("Bond10_month", bond10)
 
+# --- 미국 M2 (FRED) ------------------------------------------------------------
+m2_us = fred("M2SL", freq="m", start="2008-01-01").rename("M2_US")
+save("M2_US_month", m2_us)
+
 # --- M2 (순차 폴백) ----------------------------------------------------------
 _m2_candidates = [
     ecos("101Y003", ITEM_CODE1="BBHS00"),
@@ -139,10 +144,11 @@ btc   = fetch_adj_close("BTC-USD", start="2014-01-01").rename("Bitcoin"); save("
 rate_d   = rate.resample("D").ffill()
 bond10_d = bond10.resample("D").ffill()
 m2_d     = m2.resample("D").interpolate("linear").rename("M2_D");          save("M2_daily", m2_d)
+m2_us_d  = m2_us.resample("D").interpolate("linear").rename("M2_US_D");      save("M2_US_daily", m2_us_d)
 
 # ── 3. 통합 & 저장 ─────────────────────────────
 all_df = (
-    pd.concat([fx, gold, dxy, rate_d, m2_d, bond10_d, sp500, kodex, btc], axis=1)
+    pd.concat([fx, gold, dxy, rate_d, m2_d, m2_us_d, bond10_d, sp500, kodex, btc], axis=1)
       .sort_index()
       .ffill()
 )
