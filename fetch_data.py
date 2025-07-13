@@ -32,6 +32,9 @@ from dotenv import load_dotenv
 load_dotenv()
 FRED_KEY = os.getenv("FRED_KEY", "")
 ECOS_KEY = os.getenv("ECOS_KEY", "")
+MOLIT_KEY = os.getenv("MOLIT_KEY", "")  # 국토부 미분양주택 현황
+RONE_KEY = os.getenv("RONE_KEY", "")    # 부동산원 R-ONE API Key
+RTMS_AREA = os.getenv("RTMS_AREA", "")   # 부동산 지수 조회 지역 코드(콤마구분)
 DIR = Path("data"); DIR.mkdir(exist_ok=True)
 
 # FRED 시리즈 ID 상수화
@@ -109,6 +112,95 @@ def fetch_adj_close(ticker: str, *, start: str = "2008-01-01") -> pd.Series:
     return ser
 
 
+def fetch_rone_price_index(kind: str, areas: List[str]) -> pd.DataFrame:
+    """R-ONE 주택가격지수(kinds="sale" or "rent")"""
+    if not RONE_KEY or not areas:
+        return pd.DataFrame()
+
+    base = "https://r-one.co.kr/idxsvc/getAptPriceIndex"
+    frames = []
+    end = dt.date.today().strftime("%Y%m")
+    for cd in areas:
+        try:
+            resp = requests.get(
+                base,
+                params={
+                    "serviceKey": RONE_KEY,
+                    "areaCode": cd,
+                    "indexGubun": kind,
+                    "startMonth": "200601",
+                    "endMonth": end,
+                },
+                timeout=30,
+            )
+            resp.raise_for_status()
+            items = resp.json().get("response", {}).get("body", {}).get("items", [])
+            df = pd.DataFrame(items)
+            if df.empty:
+                continue
+            df.index = pd.to_datetime(df["baseYm"], format="%Y%m")
+            df = df[["idx"]].astype(float).rename(columns={"idx": f"{kind}_{cd}"})
+            frames.append(df)
+        except Exception as e:  # pragma: no cover - 네트워크 오류 대비
+            print("R-ONE fetch failed", cd, e)
+    return pd.concat(frames, axis=1) if frames else pd.DataFrame()
+
+
+def fetch_unsold_house_status() -> pd.Series:
+    """국토부 미분양주택 현황"""
+    if not MOLIT_KEY:
+        return pd.Series(dtype=float, name="Unsold")
+
+    url = "https://apis.data.go.kr/B552555/unsoldHouseStatus/getUnsoldHouseStatus"
+    end = dt.date.today().strftime("%Y%m")
+    try:
+        resp = requests.get(
+            url,
+            params={
+                "serviceKey": MOLIT_KEY,
+                "startYm": "200601",
+                "endYm": end,
+                "numOfRows": 1000,
+                "pageNo": 1,
+            },
+            timeout=30,
+        )
+        resp.raise_for_status()
+        items = resp.json().get("response", {}).get("body", {}).get("items", [])
+        df = pd.DataFrame(items)
+        if df.empty:
+            return pd.Series(dtype=float, name="Unsold")
+        df.index = pd.to_datetime(df["ym"], format="%Y%m")
+        ser = df["unsoldHouseCnt"].astype(float)
+        ser.name = "Unsold"
+        return ser
+    except Exception as e:  # pragma: no cover - API 오류 대비
+        print("Unsold house fetch failed", e)
+        return pd.Series(dtype=float, name="Unsold")
+
+
+def fetch_buy_index() -> pd.Series:
+    """주간 매수우위지수 (부동산원 주간동향)"""
+    url = "https://www.reb.or.kr/r-one/report.do?cmd=weeklyTrend"
+    try:
+        html = requests.get(url, timeout=30).text
+        tables = pd.read_html(html)
+        df = tables[0]
+        df.columns = [c.strip() for c in df.columns]
+        if "날짜" in df.columns:
+            df.index = pd.to_datetime(df["날짜"])
+        elif "주차" in df.columns:
+            df.index = pd.to_datetime(df["주차"])
+        else:
+            df.index = pd.to_datetime(df.iloc[:, 0])
+        ser = df.iloc[:, 1].astype(float)
+        ser.name = "BuyIndex"
+        return ser.sort_index()
+    except Exception as e:  # pragma: no cover - 스크래핑 오류 대비
+        print("Buy index fetch failed", e)
+        return pd.Series(dtype=float, name="BuyIndex")
+
+
 # ── 1. 원시 시리즈 수집 ──────────────────────────
 fx   = fred("DEXKOUS");                     fx.name  = "FX";        save("FX_raw", fx)
 
@@ -165,6 +257,23 @@ sp500 = fetch_adj_close("^GSPC").rename("SP500");          save("SP500_raw", sp5
 kodex = fetch_adj_close("069500.KS").rename("KODEX200");  save("KODEX200_raw", kodex)
 btc   = fetch_adj_close("BTC-USD", start="2014-01-01").rename("Bitcoin"); save("Bitcoin_raw", btc)
 
+# --- 부동산 지수 --------------------------------------------------------------
+areas = [a.strip() for a in RTMS_AREA.split(',') if a.strip()]
+idx_sale = fetch_rone_price_index("sale", areas)
+if not idx_sale.empty:
+    save("RTMS_sale", idx_sale)
+idx_rent = fetch_rone_price_index("rent", areas)
+if not idx_rent.empty:
+    save("RTMS_rent", idx_rent)
+
+unsold = fetch_unsold_house_status()
+if not unsold.empty:
+    save("Unsold", unsold)
+
+buy_idx = fetch_buy_index()
+if not buy_idx.empty:
+    save("BuyIndex", buy_idx)
+
 # ── 2. 월→일 변환 ──────────────────────────────
 rate_d = rate.resample("D").ffill()
 bond10_d = bond10.resample("D").ffill()
@@ -175,6 +284,23 @@ m2_us_d = m2_us.resample("D").interpolate("linear").rename("M2_US_D"); save("M2_
 cpi_d = cpi.resample("D").ffill().rename("CPI_D"); save("CPI_daily", cpi_d)
 core_cpi_d = core_cpi.resample("D").ffill().rename("CoreCPI_D"); save("CoreCPI_daily", core_cpi_d)
 real_rate_d = real_rate.resample("D").ffill().rename("RealRate_D"); save("RealRate_daily", real_rate_d)
+
+if not idx_sale.empty:
+    idx_sale_d = idx_sale.resample("D").ffill()
+else:
+    idx_sale_d = pd.DataFrame()
+if not idx_rent.empty:
+    idx_rent_d = idx_rent.resample("D").ffill()
+else:
+    idx_rent_d = pd.DataFrame()
+if not unsold.empty:
+    unsold_d = unsold.resample("D").ffill()
+else:
+    unsold_d = pd.Series(dtype=float, name="Unsold")
+if not buy_idx.empty:
+    buy_idx_d = buy_idx.resample("D").ffill()
+else:
+    buy_idx_d = pd.Series(dtype=float, name="BuyIndex")
 
 # 금리 스프레드(10Y - 정책금리) 5일 평균
 spread5d = (bond10_d - rate_d).rolling(5).mean().rename("Spread5D")
@@ -198,6 +324,10 @@ all_df = (
             cpi_d,
             core_cpi_d,
             real_rate_d,
+            idx_sale_d,
+            idx_rent_d,
+            unsold_d,
+            buy_idx_d,
             sp500,
             kodex,
             btc,
