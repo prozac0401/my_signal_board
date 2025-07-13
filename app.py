@@ -31,28 +31,24 @@ HELP_MD = """
 3. 기본 스케일은 `표준화` 입니다. 값 범위가 크게 다른 지표끼리 겹쳐도 직선으로 눌리지 않아요.
 """
 
-HELP_MD2 = """
-### M2 YoY 4-단계 구간
-| 구간 | 해석 | 시사점 |
-|------|------|-------|
-| **> 9 %** • 팽창 | 평균 + 0.5 σ 이상 | 리스크-온 (주식·부동산 확대) |
-| **6 – 9 %** • 완충 | 평균 부근 | 중립 · 추세 확인 |
-| **3 – 6 %** • 둔화 | 평균 – 1 σ 이상 | 경계 · 리밸런스 |
-| **< 3 %** • 수축 | 평균 – 1 σ 이하 | 리스크-오프 (현금·단기채 확대) |
-
-#### 응용 TIP
-| 아이디어 | 설명 |
-|----------|------|
-| **신호 필터링** | M2 YoY > 9 % 구간에서만 KODEX 200 신호 채택 → 가짜 반등 회피 |
-| **멀티 컨펌** | M2 팽창 + 환율 ↓ + KODEX 200 ↑ → **공격적 비중 확대**<br>M2 수축 + Gold ↓ → 안전자산 축소·현금 확보 |
-| **모멘텀 결합** | ‘팽창’이면서 M2 YoY 20 EMA 위 && 기울기 상승일 때만 리스크-온 |
-"""
+REL_MD = {
+    "M2": "- M2 증가율이 높으면 주식·부동산 등 위험자산 가격이 상승하기 쉽습니다.\n- 금리 하락과 동시에 M2가 늘어나면 경기 부양 신호로 해석됩니다.",
+    "Rate": "- 금리 상승은 대체로 주식·부동산에 부정적 영향을 줍니다.\n- 금리가 CPI보다 낮으면 실질 금리가 마이너스로 금과 비트코인 선호가 높아집니다.",
+    "USDKRW": "- 환율 하락(원화 강세)은 해외자산 투자 비용을 낮춥니다.\n- 환율 상승과 금 가격 상승이 동시에 나타나면 위험 회피 심리가 강합니다.",
+    "CPI": "- 물가가 빠르게 오르면 중앙은행은 금리 인상을 검토하게 됩니다.\n- CPI 안정 + M2 증가 조합은 경기 회복 신호로 볼 수 있습니다.",
+    "KODEX": "- 국내 주식 지수로, M2 증가와 금리 하락 시 상승 가능성이 높습니다.",
+    "SP500": "- 미국 M2 증가와 실질 금리 하락이 함께할 때 강세를 보이는 경향이 있습니다.",
+    "Gold": "- 실질 금리가 0 이하일 때 금 수요가 커집니다.\n- 달러 약세와 함께 금 가격이 오르면 위험 회피 심리를 나타냅니다.",
+    "BTC": "- 유동성이 풍부하고 실질 금리가 낮을 때 강세가 나타납니다.\n- 위험 회피 국면에서는 변동성이 커지므로 주의가 필요합니다.",
+    "M2US": "- 미국 M2가 빠르게 증가하면 S&P 500 등 미국 자산에 우호적인 환경이 만들어집니다.",
+    "RealRate": "- 실질 금리가 플러스일 때 안전자산 매력은 감소합니다.\n- 실질 금리 마이너스 구간은 금과 비트코인 선호가 높아집니다.",
+    "CoreCPI": "- 근원 CPI가 상승세면 금리 인상 가능성이 높아집니다.",
+}
 
 with st.sidebar.expander("ℹ️ 도움말 · Help", expanded=False):
     st.markdown(HELP_MD)
 
-with st.sidebar.expander("ℹ️ M2 YoY 도움말", False):
-    st.markdown(HELP_MD2, unsafe_allow_html=True)
+
 
 # ───────────────────────────────────────────────────────────────
 # 1. 데이터 로드
@@ -262,9 +258,15 @@ TAB_KEYS = {
 
 st.sidebar.markdown("### 🔀 탭 On / Off")
 selected_tabs = []
-for i, (key, label) in enumerate(TAB_KEYS.items()):
+for key, label in TAB_KEYS.items():
     default_on = key in {"Gold", "KODEX"}
-    if st.sidebar.toggle(label, value=default_on, key=f"tab_{key}"):
+    col_t, col_p = st.sidebar.columns([6, 1])
+    with col_t:
+        val = st.toggle(label, value=default_on, key=f"tab_{key}")
+    with col_p:
+        with st.popover("❔", key=f"pop_{key}"):
+            st.markdown(REL_MD.get(key, ""))
+    if val:
         selected_tabs.append(key)
 
 if not selected_tabs:
