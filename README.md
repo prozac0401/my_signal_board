@@ -13,8 +13,8 @@
 | 지표 | API 경로 | 업데이트 주기 | 상태 |
 | ---- | -------- | ------------- | ---- |
 | 정책금리·국채금리 | 한국은행 ECOS `StatisticSearch` (722Y001,121Y005) | 월/일 | (완료) |
-| CPI·근원물가 | 통계청 KOSIS `902Y001` | 월 | (예정) |
-| 실질금리 | 금리-CPI 연산(Pandas) | 월 | (예정) |
+| CPI·근원물가 | FRED `CPIAUCSL`·`CPILFESL` | 월 | (완료) |
+| 실질금리 | 금리-CPI 연산(Pandas) | 월 | (완료) |
 | M2 통화량 | ECOS `060Y002` | 월 | (완료) |
 | USD/KRW | ECOS `731Y001` 또는 Investing.com CSV | 일 | (완료) |
 | KODEX 200 가격 | Investing.com `069500` CSV | 일 | (완료) |
