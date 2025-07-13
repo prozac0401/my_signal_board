@@ -297,9 +297,31 @@ TAB_KEYS = {
     "CPI": "CPI·근원·실질금리",
 }
 
+# 각 탭에 필요한 컬럼 집합을 정의한다.
+TAB_REQUIRES = {
+    "Gold": {"Gold_KRWg"},
+    "KODEX": {"KODEX200"},
+    "SP500": {"SP500"},
+    "BTC": {"Bitcoin"},
+    "M2": {"M2_D"},
+    "M2US": {"M2_US_D"},
+    "USDKRW": {"FX"},
+    "RateKR": {"Rate", "Bond10"},
+    "RateUS": {"Rate_US", "Bond10_US"},
+    "CPI": {"CPI_D", "CoreCPI_D", "RealRate_D"},
+}
+
 st.sidebar.markdown("### 🔀 탭 On / Off")
 selected_tabs = []
+
+available_tabs = []
+for t, cols in TAB_REQUIRES.items():
+    if cols.issubset(view.columns) and not view[list(cols)].dropna(how="all").empty:
+        available_tabs.append(t)
+
 for key, label in TAB_KEYS.items():
+    if key not in available_tabs:
+        continue
     default_on = key in {"Gold", "KODEX"}
     col_t, col_p = st.sidebar.columns([6, 1])
     with col_t:
@@ -309,6 +331,10 @@ for key, label in TAB_KEYS.items():
             st.markdown(REL_MD.get(key, ""))
     if val:
         selected_tabs.append(key)
+
+if not available_tabs:
+    st.warning("선택한 기간에 표시할 수 있는 지표가 없습니다.")
+    st.stop()
 
 if not selected_tabs:
     st.warning("사이드바에서 최소 1개의 탭을 켜 주세요.")
@@ -323,7 +349,7 @@ scale_mode = st.sidebar.radio("값 스케일", ("원본 값", "표준화 (0‑1 
 
 st.sidebar.markdown("### ✨ 보조 지표")
 
-AUX_DEFAULTS = {k: False for k in TAB_KEYS}
+AUX_DEFAULTS = {k: False for k in available_tabs}
 
 aux_enabled = {}
 for k in selected_tabs:
@@ -576,32 +602,36 @@ st.plotly_chart(fig, use_container_width=True)
 # ----------------------------------------------------------------
 
 snap_vals = {}
-if "Gold_KRWg" in view:
-    snap_vals["Gold (원/g)"] = view["Gold_KRWg"].iloc[-1]
-if "KODEX200" in view:
-    snap_vals["KODEX 200"] = view["KODEX200"].iloc[-1]
-if "SP500" in view:
-    snap_vals["S&P 500"] = view["SP500"].iloc[-1]
-if "Bitcoin" in view:
-    snap_vals["Bitcoin"] = view["Bitcoin"].iloc[-1]
-if "FX" in view:
-    snap_vals["USD/KRW"] = view["FX"].iloc[-1]
-if "Rate" in view:
-    snap_vals["기준금리 (%)"] = view["Rate"].iloc[-1]
-if "Bond10" in view:
-    snap_vals["10Y (%)"] = view["Bond10"].iloc[-1]
-if "Rate_US" in view:
-    snap_vals["연준금리 (%)"] = view["Rate_US"].iloc[-1]
-if "Bond10_US" in view:
-    snap_vals["미국10Y (%)"] = view["Bond10_US"].iloc[-1]
-if "M2_D" in view:
-    snap_vals["국내 M2 월말"] = view["M2_D"].resample("ME").last().iloc[-1]
-if "M2_US_D" in view:
-    snap_vals["미국 M2 월말"] = view["M2_US_D"].resample("ME").last().iloc[-1]
-if "CPI_D" in view:
-    snap_vals["CPI"] = view["CPI_D"].resample("ME").last().iloc[-1]
-if "RealRate_D" in view:
-    snap_vals["Real Rate"] = view["RealRate_D"].resample("ME").last().iloc[-1]
+def _last_valid(series: pd.Series):
+    series = series.dropna()
+    return series.iloc[-1] if not series.empty else None
+
+if "Gold_KRWg" in view and not view["Gold_KRWg"].dropna().empty:
+    snap_vals["Gold (원/g)"] = _last_valid(view["Gold_KRWg"])
+if "KODEX200" in view and not view["KODEX200"].dropna().empty:
+    snap_vals["KODEX 200"] = _last_valid(view["KODEX200"])
+if "SP500" in view and not view["SP500"].dropna().empty:
+    snap_vals["S&P 500"] = _last_valid(view["SP500"])
+if "Bitcoin" in view and not view["Bitcoin"].dropna().empty:
+    snap_vals["Bitcoin"] = _last_valid(view["Bitcoin"])
+if "FX" in view and not view["FX"].dropna().empty:
+    snap_vals["USD/KRW"] = _last_valid(view["FX"])
+if "Rate" in view and not view["Rate"].dropna().empty:
+    snap_vals["기준금리 (%)"] = _last_valid(view["Rate"])
+if "Bond10" in view and not view["Bond10"].dropna().empty:
+    snap_vals["10Y (%)"] = _last_valid(view["Bond10"])
+if "Rate_US" in view and not view["Rate_US"].dropna().empty:
+    snap_vals["연준금리 (%)"] = _last_valid(view["Rate_US"])
+if "Bond10_US" in view and not view["Bond10_US"].dropna().empty:
+    snap_vals["미국10Y (%)"] = _last_valid(view["Bond10_US"])
+if "M2_D" in view and not view["M2_D"].dropna().empty:
+    snap_vals["국내 M2 월말"] = _last_valid(view["M2_D"].resample("ME").last())
+if "M2_US_D" in view and not view["M2_US_D"].dropna().empty:
+    snap_vals["미국 M2 월말"] = _last_valid(view["M2_US_D"].resample("ME").last())
+if "CPI_D" in view and not view["CPI_D"].dropna().empty:
+    snap_vals["CPI"] = _last_valid(view["CPI_D"].resample("ME").last())
+if "RealRate_D" in view and not view["RealRate_D"].dropna().empty:
+    snap_vals["Real Rate"] = _last_valid(view["RealRate_D"].resample("ME").last())
 
 st.markdown("### 최근 값 Snapshot")
 
