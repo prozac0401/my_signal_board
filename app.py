@@ -328,7 +328,7 @@ for t, cols in TAB_REQUIRES.items():
 for key, label in TAB_KEYS.items():
     if key not in available_tabs:
         continue
-    default_on = key in {"Gold", "KODEX"}
+    default_on = key in {"Gold", "KODEX", "RealRate"}
     col_t, col_p = st.sidebar.columns([6, 1])
     with col_t:
         val = st.toggle(label, value=default_on, key=f"tab_{key}")
