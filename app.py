@@ -62,7 +62,11 @@ REL_MD = {
     ),
     "CPI": (
         "- 물가 상승은 긴축 가능성을 높여 위험자산에 부담입니다."
-        "\n- 헤드라인·근원 **CPI** 흐름과 **실질금리**를 함께 보면 정책 방향을 가늠할 수 있습니다."
+        "\n- 헤드라인·근원 **CPI** 흐름을 보며 정책 방향을 가늠할 수 있습니다."
+    ),
+    "RealRate": (
+        "- **실질금리(RealRate)**가 0 이하이면 금과 같은 실물자산 선호가 커집니다.",
+        "\n- 실질금리 상승 전환은 위험자산 비중 축소 신호가 될 수 있습니다.",
     ),
     "KODEX": (
         "- 국내 주식 지수로, **M2** 증가와 **금리** 하락 시 상승 가능성이 높아 비중 확대 신호입니다."
@@ -294,7 +298,8 @@ TAB_KEYS = {
     "USDKRW": "환율",
     "RateKR": "국내 금리/10Y",
     "RateUS": "미국 금리/10Y",
-    "CPI": "CPI·근원·실질금리",
+    "CPI": "CPI·근원",
+    "RealRate": "실질금리",
 }
 
 # 각 탭에 필요한 컬럼 집합을 정의한다.
@@ -308,7 +313,8 @@ TAB_REQUIRES = {
     "USDKRW": {"FX"},
     "RateKR": {"Rate", "Bond10"},
     "RateUS": {"Rate_US", "Bond10_US"},
-    "CPI": {"CPI_D", "CoreCPI_D", "RealRate_D"},
+    "CPI": {"CPI_D", "CoreCPI_D"},
+    "RealRate": {"RealRate_D"},
 }
 
 st.sidebar.markdown("### 🔀 탭 On / Off")
@@ -501,12 +507,11 @@ for tab in selected_tabs:
                 line=dict(width=2, color=next(color_iter)),
             )
 
-    # CPI · Core CPI · Real Rate
-    elif tab == "CPI" and {"CPI_D", "CoreCPI_D", "RealRate_D"}.issubset(view.columns):
+    # CPI · Core CPI
+    elif tab == "CPI" and {"CPI_D", "CoreCPI_D"}.issubset(view.columns):
         df_cpi = pd.DataFrame({
             "CPI": view["CPI_D"].resample("ME").last(),
             "CoreCPI": view["CoreCPI_D"].resample("ME").last(),
-            "RealRate": view["RealRate_D"].resample("ME").last(),
         })
         if aux_enabled.get("CPI"):
             yoy = (df_cpi["CPI"].pct_change(12) * 100).rename("CPI YoY%")
@@ -529,6 +534,18 @@ for tab in selected_tabs:
             fig.add_scatter(
                 x=df_cpi.index,
                 y=scaler(df_cpi[col]),
+                name=col,
+                mode="lines",
+                line=dict(width=2, color=next(color_iter)),
+            )
+
+    # Real Rate
+    elif tab == "RealRate" and {"RealRate_D"}.issubset(view.columns):
+        rr = view["RealRate_D"].resample("ME").last().to_frame(name="RealRate")
+        for col in rr.columns:
+            fig.add_scatter(
+                x=rr.index,
+                y=scaler(rr[col]),
                 name=col,
                 mode="lines",
                 line=dict(width=2, color=next(color_iter)),
