@@ -2,7 +2,8 @@ pandas
 requests
 python-dotenv
 yfinance
-streamlit
+streamlit>=1.37,<2
+altair<5
 plotly
 beautifulsoup4        # KRX 금 스크래핑용
 pytest

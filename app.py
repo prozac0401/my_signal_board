@@ -49,12 +49,12 @@ REL_MD = {
         "\n- **금리** 하락과 함께 **M2**가 재가속하면 위험자산 비중 확대를 고려합니다."
     ),
     "RateKR": (
-        "- 국내 **금리** 상승은 주식·부동산에 부정적 영향을 줍니다.",
-        "\n- **금리**가 **CPI**보다 낮아 실질 금리가 마이너스면 **Gold**·**BTC** 비중 확대를 검토합니다.",
+        "- 국내 **금리** 상승은 주식·부동산에 부정적 영향을 줍니다."
+        "\n- **금리**가 **CPI**보다 낮아 실질 금리가 마이너스면 **Gold**·**BTC** 비중 확대를 검토합니다."
     ),
     "RateUS": (
-        "- 미국 **금리** 상승은 전세계 금융시장에 영향을 줍니다.",
-        "\n- **금리**가 **CPI**보다 낮아 실질 금리가 마이너스면 위험자산 선호가 높아질 수 있습니다.",
+        "- 미국 **금리** 상승은 전세계 금융시장에 영향을 줍니다."
+        "\n- **금리**가 **CPI**보다 낮아 실질 금리가 마이너스면 위험자산 선호가 높아질 수 있습니다."
     ),
     "USDKRW": (
         "- 환율 하락(원화 강세)은 해외자산 투자 비용을 낮춰 **SP500** 비중 확대 근거가 됩니다."
@@ -65,8 +65,8 @@ REL_MD = {
         "\n- 헤드라인·근원 **CPI** 흐름을 보며 정책 방향을 가늠할 수 있습니다."
     ),
     "RealRate": (
-        "- **실질금리(RealRate)**가 0 이하이면 금과 같은 실물자산 선호가 커집니다.",
-        "\n- 실질금리 상승 전환은 위험자산 비중 축소 신호가 될 수 있습니다.",
+        "- **실질금리(RealRate)**가 0 이하이면 금과 같은 실물자산 선호가 커집니다."
+        "\n- 실질금리 상승 전환은 위험자산 비중 축소 신호가 될 수 있습니다."
     ),
     "KODEX": (
         "- 국내 주식 지수로, **M2** 증가와 **금리** 하락 시 상승 가능성이 높아 비중 확대 신호입니다."
@@ -108,8 +108,12 @@ if not DATA_FP.exists():
 @st.cache_data(show_spinner=False)
 def load_df(path: Path) -> pd.DataFrame:
     """CSV 로드 및 컬럼 정리 과정을 캐시합니다."""
+    try:
+        df = pd.read_csv(path, index_col=0, parse_dates=True)
+    except Exception as exc:
+        raise RuntimeError(f"CSV 로드 실패: {path}") from exc
 
-    df = pd.read_csv(path, index_col=0, parse_dates=True).ffill().loc["2008-01-01":]
+    df = df.ffill().loc["2008-01-01":]
 
     # Gold 원화 환산 – CSV에 없을 때만 계산
     a0_cols = df.columns
@@ -166,7 +170,12 @@ def load_df(path: Path) -> pd.DataFrame:
     return df
 
 
-df: pd.DataFrame = load_df(DATA_FP)
+try:
+    df: pd.DataFrame = load_df(DATA_FP)
+except Exception as exc:
+    st.error("❌ 데이터 로딩 중 오류가 발생했습니다. CSV 형식/인코딩을 확인해 주세요.")
+    st.exception(exc)
+    st.stop()
 
 # ───────────────────────────────────────────────────────────────
 # 2. 기간 슬라이더 & View DF
