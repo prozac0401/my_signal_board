@@ -19,6 +19,8 @@ from __future__ import annotations
 
 import os
 import io
+import re
+import html as html_lib
 import datetime as dt
 from pathlib import Path
 from typing import List
@@ -50,6 +52,32 @@ CORECPI_FRED_ID = "CPILFESL"       # Core CPI (monthly)
 def save(name: str, obj: pd.Series | pd.DataFrame) -> None:
     obj.to_csv(DIR / f"{name}.csv")
     print(f"✔ {name:13s} {len(obj):6,d}")
+
+
+def empty_series(name: str) -> pd.Series:
+    return pd.Series(dtype=float, index=pd.DatetimeIndex([]), name=name)
+
+
+def to_datetime_index(ser: pd.Series) -> pd.Series:
+    if ser.empty:
+        return empty_series(ser.name or "")
+    out = ser.copy()
+    out.index = pd.to_datetime(out.index, errors="coerce")
+    out = out[~out.index.isna()].sort_index()
+    return out
+
+
+def safe_resample(ser: pd.Series, rule: str, method: str, *, name: str) -> pd.Series:
+    ser = to_datetime_index(ser)
+    if ser.empty:
+        return empty_series(name)
+    if method == "ffill":
+        out = ser.resample(rule).ffill()
+    elif method == "linear":
+        out = ser.resample(rule).interpolate("linear")
+    else:
+        raise ValueError(f"Unsupported resample method: {method}")
+    return out.rename(name)
 
 
 # ── API 래퍼 ────────────────────────────────────
@@ -179,26 +207,57 @@ def fetch_unsold_house_status() -> pd.Series:
         return pd.Series(dtype=float, name="Unsold")
 
 
+def _extract_table_rows(html: str) -> list[list[str]]:
+    rows: list[list[str]] = []
+    for tr in re.findall(r"<tr[^>]*>(.*?)</tr>", html, flags=re.IGNORECASE | re.DOTALL):
+        cells = re.findall(r"<t[dh][^>]*>(.*?)</t[dh]>", tr, flags=re.IGNORECASE | re.DOTALL)
+        if not cells:
+            continue
+        cleaned = [html_lib.unescape(re.sub(r"<[^>]+>", "", c)).strip() for c in cells]
+        rows.append(cleaned)
+    return rows
+
+
 def fetch_buy_index() -> pd.Series:
     """주간 매수우위지수 (부동산원 주간동향)"""
     url = "https://www.reb.or.kr/r-one/report.do?cmd=weeklyTrend"
     try:
         html = requests.get(url, timeout=30).text
-        tables = pd.read_html(html)
-        df = tables[0]
-        df.columns = [c.strip() for c in df.columns]
+
+        # 1) 표준 파서 경로 (설치된 parser 엔진 자동 사용)
+        try:
+            tables = pd.read_html(io.StringIO(html))
+            df = tables[0]
+        except Exception:
+            # 2) parser 의존성 실패 시 정규식 기반 최소 파싱
+            rows = _extract_table_rows(html)
+            if len(rows) < 2:
+                return empty_series("BuyIndex")
+            header = rows[0]
+            data_rows = [r for r in rows[1:] if len(r) >= 2]
+            df = pd.DataFrame(data_rows, columns=header[: len(data_rows[0])])
+
+        df.columns = [str(c).strip() for c in df.columns]
         if "날짜" in df.columns:
-            df.index = pd.to_datetime(df["날짜"])
+            dt_col = "날짜"
         elif "주차" in df.columns:
-            df.index = pd.to_datetime(df["주차"])
+            dt_col = "주차"
         else:
-            df.index = pd.to_datetime(df.iloc[:, 0])
-        ser = df.iloc[:, 1].astype(float)
+            dt_col = df.columns[0]
+
+        numeric_col = next((c for c in df.columns if c != dt_col), df.columns[1] if len(df.columns) > 1 else None)
+        if numeric_col is None:
+            return empty_series("BuyIndex")
+
+        df[dt_col] = pd.to_datetime(df[dt_col], errors="coerce")
+        ser = pd.to_numeric(df[numeric_col], errors="coerce")
+        ser.index = df[dt_col]
+        ser = ser.dropna()
         ser.name = "BuyIndex"
-        return ser.sort_index()
+        return to_datetime_index(ser)
     except Exception as e:  # pragma: no cover - 스크래핑 오류 대비
         print("Buy index fetch failed", e)
-        return pd.Series(dtype=float, name="BuyIndex")
+        return empty_series("BuyIndex")
 
 
 # ── 1. 원시 시리즈 수집 ──────────────────────────
@@ -249,7 +308,7 @@ _m2_candidates = [
     ecos("LDT_MA001_A", ITM_ID="A"),
 ]
 
-m2 = next((s for s in _m2_candidates if not s.empty), pd.Series(name="M2"))
+m2 = next((s for s in _m2_candidates if not s.empty), empty_series("M2"))
 save("M2_month", m2)
 
 # --- 주가 지수 (Yahoo Finance) ------------------------------------------------
@@ -275,15 +334,15 @@ if not buy_idx.empty:
     save("BuyIndex", buy_idx)
 
 # ── 2. 월→일 변환 ──────────────────────────────
-rate_d = rate.resample("D").ffill()
-bond10_d = bond10.resample("D").ffill()
-us_rate_d = us_rate.resample("D").ffill()
-us_bond10_d = us_bond10.resample("D").ffill()
-m2_d = m2.resample("D").interpolate("linear").rename("M2_D"); save("M2_daily", m2_d)
-m2_us_d = m2_us.resample("D").interpolate("linear").rename("M2_US_D"); save("M2_US_daily", m2_us_d)
-cpi_d = cpi.resample("D").ffill().rename("CPI_D"); save("CPI_daily", cpi_d)
-core_cpi_d = core_cpi.resample("D").ffill().rename("CoreCPI_D"); save("CoreCPI_daily", core_cpi_d)
-real_rate_d = real_rate.resample("D").ffill().rename("RealRate_D"); save("RealRate_daily", real_rate_d)
+rate_d = safe_resample(rate, "D", "ffill", name="Rate")
+bond10_d = safe_resample(bond10, "D", "ffill", name="Bond10")
+us_rate_d = safe_resample(us_rate, "D", "ffill", name="Rate_US")
+us_bond10_d = safe_resample(us_bond10, "D", "ffill", name="Bond10_US")
+m2_d = safe_resample(m2, "D", "linear", name="M2_D"); save("M2_daily", m2_d)
+m2_us_d = safe_resample(m2_us, "D", "linear", name="M2_US_D"); save("M2_US_daily", m2_us_d)
+cpi_d = safe_resample(cpi, "D", "ffill", name="CPI_D"); save("CPI_daily", cpi_d)
+core_cpi_d = safe_resample(core_cpi, "D", "ffill", name="CoreCPI_D"); save("CoreCPI_daily", core_cpi_d)
+real_rate_d = safe_resample(real_rate, "D", "ffill", name="RealRate_D"); save("RealRate_daily", real_rate_d)
 
 if not idx_sale.empty:
     idx_sale_d = idx_sale.resample("D").ffill()
