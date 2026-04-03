@@ -4,7 +4,7 @@
 fetch_data.py  –  거시·자산 원천 데이터 수집 (v4)
 ─────────────────────────────────────────────
 ✓ FX       : USD/KRW (FRED DEXKOUS, 일)
-✓ Gold     : XAU/USD (Stooq, 일)
+✓ Gold     : Gold futures (Yahoo Finance GC=F, 일)
 ✓ DXY      : 달러지수 (FRED DTWEXM, 일)
 ✓ Rate     : 한국은행 기준금리 (FRED INTDSRKRM193N, 월 → 일 ffill)
 ✓ Bond10   : 국채 10년 수익률 (FRED IRLTLT01KRM156N, 월 → 일 ffill)
@@ -80,6 +80,26 @@ def safe_resample(ser: pd.Series, rule: str, method: str, *, name: str) -> pd.Se
     return out.rename(name)
 
 
+def load_cached_series(column: str, *, path: Path | None = None) -> pd.Series:
+    target = path or (DIR / "all_data.csv")
+    if not target.exists():
+        return empty_series(column)
+
+    try:
+        df = pd.read_csv(target, index_col=0)
+    except (FileNotFoundError, pd.errors.EmptyDataError):
+        return empty_series(column)
+
+    if column not in df.columns:
+        return empty_series(column)
+
+    ser = pd.to_numeric(df[column], errors="coerce").dropna()
+    ser.index = pd.to_datetime(ser.index, errors="coerce")
+    ser = ser[~ser.index.isna()]
+    ser.name = column
+    return to_datetime_index(ser)
+
+
 # ── API 래퍼 ────────────────────────────────────
 
 def fred(series: str, *, freq: str = "d", start: str = "2008-01-01") -> pd.Series:
@@ -122,7 +142,7 @@ def ecos(code: str, **flt) -> pd.Series:
 
 
 def fetch_adj_close(ticker: str, *, start: str = "2008-01-01") -> pd.Series:
-    raw = yf.download(ticker, start=start, progress=False, threads=False)
+    raw = yf.download(ticker, start=start, progress=False, threads=False, auto_adjust=False)
     if raw.empty:
         raise RuntimeError(f"yfinance returned no data for {ticker}")
     raw.index = raw.index.tz_localize(None)
@@ -138,6 +158,24 @@ def fetch_adj_close(ticker: str, *, start: str = "2008-01-01") -> pd.Series:
 
     ser.name = ticker
     return ser
+
+
+def fetch_gold(*, start: str = "2008-01-01") -> pd.Series:
+    cached = load_cached_series("Gold")
+
+    try:
+        live = fetch_adj_close("GC=F", start=start).rename("Gold")
+        if not cached.empty and not live.empty:
+            older_cached = cached[cached.index < live.index.min()]
+            if not older_cached.empty:
+                live = pd.concat([older_cached, live]).sort_index()
+        return live
+    except Exception as e:  # pragma: no cover - network/API fallback
+        print("Gold fetch failed", e)
+        if not cached.empty:
+            print("Using cached Gold series from data/all_data.csv")
+            return cached.rename("Gold")
+        return empty_series("Gold")
 
 
 def fetch_rone_price_index(kind: str, areas: List[str]) -> pd.DataFrame:
@@ -263,12 +301,7 @@ def fetch_buy_index() -> pd.Series:
 # ── 1. 원시 시리즈 수집 ──────────────────────────
 fx   = fred("DEXKOUS");                     fx.name  = "FX";        save("FX_raw", fx)
 
-gold = pd.read_csv(
-    io.StringIO(requests.get("https://stooq.com/q/d/l/?s=xauusd&c=2008&f=sd2").text),
-    sep=";", engine="python",
-)
-gold = gold[gold.Close != "-"][["Date", "Close"]].set_index("Date").astype(float).squeeze()
-gold.index = pd.to_datetime(gold.index);    gold.name = "Gold";     save("Gold_raw", gold)
+gold = fetch_gold();                         gold.name = "Gold";     save("Gold_raw", gold)
 
 # Gold 원화 환산 (원/그램)
 gold_krwg = (gold * fx / 31.1035).rename("Gold_KRWg")
